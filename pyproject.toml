@@ -1,0 +1,137 @@
+[project]
+name = "web-search-api"
+version = "0.1.0"
+description = "FastAPI service that scrapes Google search results and web pages, then synthesises executive summaries with any of ~60 LLM providers."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "httpx>=0.27",
+    "structlog>=24.4",
+    "selectolax>=0.3.21",
+    "playwright>=1.48",
+    "anthropic>=0.40",
+    "openai>=1.55",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "respx>=0.21",
+    "hypothesis>=6.115",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# --------------------------------------------------------------------------- #
+# Lint / format
+# --------------------------------------------------------------------------- #
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "N",         # pep8-naming
+    "UP",        # pyupgrade
+    "B",         # bugbear
+    "C4",        # comprehensions
+    "SIM",       # simplify
+    "RUF",       # ruff-specific
+    "ASYNC",     # async correctness
+    "S",         # bandit
+    "T20",       # no print
+    "PT",        # pytest style
+    "ANN",       # type annotations
+    "D",         # docstrings
+]
+ignore = [
+    "D203",   # conflicts with D211
+    "D213",   # conflicts with D212
+    "ANN401", # allow Any where genuinely needed
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "S101",   # asserts are the point
+    "D",      # tests document themselves through their names
+    "ANN",    # annotations add noise to fixtures and helpers
+    "T20",
+]
+"scripts/*" = ["T20", "D"]
+# The "Problem" suffix is deliberate: ValidationError and TimeoutError are
+# already taken by pydantic and asyncio, and shadowing them invites bugs.
+"app/core/errors.py" = ["N818"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# --------------------------------------------------------------------------- #
+# Types
+# --------------------------------------------------------------------------- #
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+disallow_any_generics = true
+plugins = []
+
+[[tool.mypy.overrides]]
+module = ["selectolax.*", "playwright.*"]
+ignore_missing_imports = true
+
+# Application code is strictly typed. Tests stay type-checked but are not made
+# to annotate every fixture and helper - that is noise, not safety.
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+disallow_incomplete_defs = false
+
+# --------------------------------------------------------------------------- #
+# Tests
+# --------------------------------------------------------------------------- #
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "browser: tests that launch a real headless Chromium against a local fixture server",
+]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_covered = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "^\\s*\\.\\.\\.$",
+    "if __name__ == .__main__.:",
+    "@(abc\\.)?abstractmethod",
+]
