@@ -2,12 +2,11 @@
 
 Parameterised by a :class:`~app.services.llm.specs.ProviderSpec`, so the ~50
 vendors that speak OpenAI's wire format share a single tested implementation.
-Per-model differences are handled by the capability layer, not here.
+Per-model differences are handled by the capability layer, not here, and
+credentials arrive per call from keyring rather than being held here at all.
 """
 
 from __future__ import annotations
-
-import os
 
 import httpx
 
@@ -18,13 +17,14 @@ from app.core.errors import (
     UpstreamError,
 )
 from app.core.logging import get_logger
+from app.services.keyring.client import ResolvedAuth
 from app.services.llm.base import ChatRequest, ChatResponse, ModelInfo
 from app.services.llm.capabilities import (
     find_unsupported_parameter,
     resolve_capabilities,
     shape_openai_body,
 )
-from app.services.llm.specs import AuthStyle, ProviderSpec
+from app.services.llm.specs import ProviderSpec
 
 logger = get_logger(__name__)
 
@@ -37,7 +37,6 @@ class OpenAICompatibleProvider:
         spec: ProviderSpec,
         client: httpx.AsyncClient,
         *,
-        api_key: str | None = None,
         base_url: str | None = None,
         timeout_seconds: float = 60.0,
     ) -> None:
@@ -46,59 +45,34 @@ class OpenAICompatibleProvider:
         Args:
             spec: The vendor's table row.
             client: Shared HTTP client.
-            api_key: Credential override. Falls back to the spec's env var.
-            base_url: Endpoint override. Falls back to the spec's env var, then
-                the spec default.
+            base_url: Endpoint override. ``None`` means "not specified, use the
+                spec default"; an explicit "" disables the provider.
             timeout_seconds: Per-request timeout.
         """
         self.spec = spec
         self.name = spec.key
+        self.requires_credential = spec.requires_key
         self._client = client
         self._timeout = timeout_seconds
-        self._api_key = api_key if api_key is not None else self._key_from_env(spec)
-        # ``None`` means "not specified"; an explicit "" disables the provider,
-        # matching how ``api_key`` is treated just above.
-        resolved_base = base_url if base_url is not None else self._base_url_from_env(spec)
-        self._base_url = resolved_base.rstrip("/")
-
-    @staticmethod
-    def _key_from_env(spec: ProviderSpec) -> str:
-        """Read the provider's credential from the environment."""
-        if spec.api_key_env is None:
-            return ""
-        return os.environ.get(spec.api_key_env, "").strip()
-
-    @staticmethod
-    def _base_url_from_env(spec: ProviderSpec) -> str:
-        """Read the provider's endpoint override, falling back to the default."""
-        if spec.base_url_env:
-            return os.environ.get(spec.base_url_env, "").strip() or spec.base_url
-        return spec.base_url
+        self._base_url = (base_url if base_url is not None else spec.base_url).rstrip("/")
 
     def is_configured(self) -> bool:
-        """Whether this provider has what it needs to be probed."""
-        if not self._base_url:
-            return False
-        if self.spec.requires_key:
-            return bool(self._api_key)
-        return True
+        """Whether this provider has the non-secret configuration it needs.
 
-    def _headers(self) -> dict[str, str]:
-        """Build the auth headers for this provider's convention."""
-        headers = {"Content-Type": "application/json"}
-        if self.spec.auth is AuthStyle.BEARER and self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        elif self.spec.auth is AuthStyle.HEADER and self.spec.auth_header and self._api_key:
-            headers[self.spec.auth_header] = self._api_key
-        return headers
+        Credentials are not consulted here: they belong to the caller and are
+        resolved per request.
+        """
+        return bool(self._base_url)
 
-    def _params(self) -> dict[str, str]:
-        """Build query parameters for providers that authenticate that way."""
-        if self.spec.auth is AuthStyle.QUERY and self._api_key:
-            return {"key": self._api_key}
-        return {}
+    def _headers(self, auth: ResolvedAuth) -> dict[str, str]:
+        """Base headers with the caller's credential attached."""
+        return {"Content-Type": "application/json", **auth.headers}
 
-    async def list_models(self) -> list[ModelInfo]:
+    def _params(self, auth: ResolvedAuth) -> dict[str, str]:
+        """Query parameters, for providers whose credential goes there."""
+        return dict(auth.query_params)
+
+    async def list_models(self, auth: ResolvedAuth) -> list[ModelInfo]:
         """List the models this provider currently offers.
 
         Providers with no usable list endpoint fall back to the static list in
@@ -107,7 +81,7 @@ class OpenAICompatibleProvider:
         if self.spec.static_models:
             return [ModelInfo.build(self.name, model) for model in self.spec.static_models]
 
-        response = await self._get(self.spec.models_path)
+        response = await self._get(self.spec.models_path, auth)
         payload = response.json()
         entries = payload.get("data", payload) if isinstance(payload, dict) else payload
         if not isinstance(entries, list):
@@ -133,7 +107,7 @@ class OpenAICompatibleProvider:
             )
         return models
 
-    async def chat(self, request: ChatRequest) -> ChatResponse:
+    async def chat(self, request: ChatRequest, auth: ResolvedAuth) -> ChatResponse:
         """Run one completion, shaping the body to what the model accepts."""
         capabilities = resolve_capabilities(request.model)
         shaped = shape_openai_body(
@@ -151,7 +125,7 @@ class OpenAICompatibleProvider:
         adjustments = list(shaped.adjustments)
 
         try:
-            payload = await self._post_chat(body)
+            payload = await self._post_chat(body, auth)
         except UpstreamError as exc:
             # Self-healing: a provider that names an unsupported parameter gets
             # one retry without it, so models released after this code was
@@ -162,7 +136,7 @@ class OpenAICompatibleProvider:
             retry_body = {k: v for k, v in body.items() if k != offender}
             adjustments.append(f"retried without '{offender}': provider rejected it")
             logger.warning("llm.retry_without_param", provider=self.name, param=offender)
-            payload = await self._post_chat(retry_body)
+            payload = await self._post_chat(retry_body, auth)
 
         return self._to_response(request, payload, adjustments)
 
@@ -195,13 +169,13 @@ class OpenAICompatibleProvider:
             finish_reason=_as_str(first.get("finish_reason")),
         )
 
-    async def _get(self, path: str) -> httpx.Response:
+    async def _get(self, path: str, auth: ResolvedAuth) -> httpx.Response:
         """Issue a GET, translating transport and status failures."""
         try:
             response = await self._client.get(
                 f"{self._base_url}{path}",
-                headers=self._headers(),
-                params=self._params(),
+                headers=self._headers(auth),
+                params=self._params(auth),
                 timeout=self._timeout,
             )
         except httpx.TimeoutException as exc:
@@ -212,13 +186,13 @@ class OpenAICompatibleProvider:
         self._raise_for_status(response)
         return response
 
-    async def _post_chat(self, body: dict[str, object]) -> dict[str, object]:
+    async def _post_chat(self, body: dict[str, object], auth: ResolvedAuth) -> dict[str, object]:
         """Issue the chat completion request."""
         try:
             response = await self._client.post(
                 f"{self._base_url}{self.spec.chat_path}",
-                headers=self._headers(),
-                params=self._params(),
+                headers=self._headers(auth),
+                params=self._params(auth),
                 json=body,
                 timeout=self._timeout,
             )

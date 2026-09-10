@@ -8,7 +8,6 @@ adapter rather than riding the compatible one.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import anthropic
@@ -20,6 +19,7 @@ from app.core.errors import (
     UpstreamError,
 )
 from app.core.logging import get_logger
+from app.services.keyring.client import ResolvedAuth
 from app.services.llm.base import ChatRequest, ChatResponse, ModelInfo
 from app.services.llm.capabilities import (
     ReasoningStyle,
@@ -41,56 +41,60 @@ class AnthropicProvider:
 
     name = PROVIDER_KEY
 
+    #: Anthropic needs a credential; there is no keyless mode.
+    requires_credential = True
+
     def __init__(
         self,
         *,
-        api_key: str | None = None,
         base_url: str | None = None,
         timeout_seconds: float = 60.0,
         max_retries: int = 2,
     ) -> None:
-        """Create the provider, reading ``ANTHROPIC_API_KEY`` when no key is given.
+        """Create the provider.
+
+        No credential is held here. Anthropic's SDK wants its key at client
+        construction, so a client is built per call from whatever keyring
+        resolved for that caller.
 
         Args:
-            api_key: Credential override.
             base_url: Endpoint override, e.g. a gateway or proxy.
             timeout_seconds: Per-request timeout.
             max_retries: How many times the SDK retries transient failures.
         """
-        self._api_key = api_key if api_key is not None else os.environ.get("ANTHROPIC_API_KEY", "")
         self._base_url = base_url
         self._timeout = timeout_seconds
         self._max_retries = max_retries
-        self._client: anthropic.AsyncAnthropic | None = None
 
     def is_configured(self) -> bool:
-        """Whether an API key is present."""
-        return bool(self._api_key)
+        """Always true: the endpoint is known and the credential is per caller."""
+        return True
 
-    @property
-    def client(self) -> anthropic.AsyncAnthropic:
-        """The lazily-constructed SDK client."""
-        if self._client is None:
-            kwargs: dict[str, Any] = {
-                "api_key": self._api_key,
-                "timeout": self._timeout,
-                "max_retries": self._max_retries,
-            }
-            if self._base_url:
-                kwargs["base_url"] = self._base_url
-            self._client = anthropic.AsyncAnthropic(**kwargs)
-        return self._client
+    def client_for(self, auth: ResolvedAuth) -> anthropic.AsyncAnthropic:
+        """Build an SDK client carrying this caller's credential.
 
-    async def aclose(self) -> None:
-        """Release the SDK client's connection pool."""
-        if self._client is not None:
-            await self._client.close()
-            self._client = None
+        The resolved headers are passed through as default headers rather than
+        unpacked into ``api_key``: keyring decides which header its key belongs
+        on, and second-guessing that here would break the moment somebody stores
+        a credential this code did not anticipate.
+        """
+        kwargs: dict[str, Any] = {
+            # The SDK requires the argument; the real credential travels in the
+            # default headers keyring gave us, which take precedence on the wire.
+            "api_key": "unused-credential-comes-from-keyring",
+            "timeout": self._timeout,
+            "max_retries": self._max_retries,
+            "default_headers": dict(auth.headers),
+        }
+        if self._base_url:
+            kwargs["base_url"] = self._base_url
+        return anthropic.AsyncAnthropic(**kwargs)
 
-    async def list_models(self) -> list[ModelInfo]:
-        """List every Claude model this key can reach."""
+    async def list_models(self, auth: ResolvedAuth) -> list[ModelInfo]:
+        """List every Claude model this caller's key can reach."""
+        client = self.client_for(auth)
         try:
-            page = await self.client.models.list(limit=100)
+            page = await client.models.list(limit=100)
         except anthropic.AuthenticationError as exc:
             raise ProviderUnavailableError(
                 "Anthropic rejected the credential", detail=str(exc)
@@ -101,6 +105,8 @@ class AnthropicProvider:
             raise TimeoutProblem("Anthropic timed out", detail=str(exc)) from exc
         except anthropic.APIError as exc:
             raise ProviderUnavailableError("Anthropic unreachable", detail=str(exc)) from exc
+        finally:
+            await client.close()
 
         models: list[ModelInfo] = []
         for entry in page.data:
@@ -165,12 +171,13 @@ class AnthropicProvider:
 
         return kwargs, adjustments
 
-    async def chat(self, request: ChatRequest) -> ChatResponse:
+    async def chat(self, request: ChatRequest, auth: ResolvedAuth) -> ChatResponse:
         """Run one completion against the Messages API."""
         kwargs, adjustments = self._build_kwargs(request)
+        client = self.client_for(auth)
 
         try:
-            message = await self.client.messages.create(**kwargs)
+            message = await client.messages.create(**kwargs)
         except anthropic.AuthenticationError as exc:
             raise ProviderUnavailableError(
                 "Anthropic rejected the credential", detail=str(exc)
@@ -181,6 +188,8 @@ class AnthropicProvider:
             raise TimeoutProblem("Anthropic timed out", detail=str(exc)) from exc
         except anthropic.APIError as exc:
             raise UpstreamError("Anthropic request failed", detail=str(exc)) from exc
+        finally:
+            await client.close()
 
         stop_reason = getattr(message, "stop_reason", None)
         if stop_reason == "refusal":

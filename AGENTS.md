@@ -16,10 +16,14 @@ intended to sit behind an MCP server.
    `ruff check`, `mypy --strict`, and `pytest` at 100% coverage.
 3. **Never weaken the coverage gate** to get a change through. If a line is
    genuinely unreachable, restructure it rather than adding a `pragma`.
-4. **Never disable the SSRF guard.** See `docs/security.md`. `WSA_ALLOW_PRIVATE_NETWORKS`
+4. **Never let a credential become process-wide again.** Keys belong to callers,
+   arrive per call as a `ResolvedAuth`, and are never held on a provider
+   instance, cached globally, or read from the environment. The catalogue cache
+   is keyed on the *verified* account id — never on anything a caller supplies.
+5. **Never disable the SSRF guard.** See `docs/security.md`. `WSA_ALLOW_PRIVATE_NETWORKS`
    exists for trusted internal deployments; cloud metadata hosts stay blocked
    even then.
-5. **No real network calls in tests.** Not Google, not any LLM API. See below.
+6. **No real network calls in tests.** Not Google, not any LLM API. See below.
 
 ## Layout
 
@@ -40,6 +44,7 @@ app/
     llm/          base protocol, specs table, capabilities, providers, registry,
                   prompts, summarizer
     jobs/         job types, in-memory store, background runner
+    keyring/      credential resolution, local token verification, Caller
     pipelines.py  the work behind each endpoint, shared by sync and background
   api/            deps (DI), mapping, routes
 tests/
@@ -77,12 +82,17 @@ If it speaks OpenAI's wire format — most do — it is **one row** in
 `app/services/llm/specs.py`:
 
 ```python
-_spec("acme", "Acme AI", "https://api.acme.ai/v1", api_key_env="ACME_API_KEY"),
+_spec("acme", "Acme AI", "https://api.acme.ai/v1"),
 ```
 
-That is the whole change. The parametrised sweep in
+That is the whole change. The provider key doubles as the keyring service name,
+so users store the key at `connections/acme`. The parametrised sweep in
 `tests/unit/test_openai_compatible.py` picks the row up automatically and will
-fail if it is malformed. Add the key to `.env.example`.
+fail if it is malformed.
+
+If the vendor wants its key somewhere unusual, set `auth=AuthStyle.HEADER` and
+`auth_header=...` — that drives `scripts/provision_keyring.py`, which is what
+makes the stored credential come back in the right shape.
 
 If the API is genuinely different, write a module under
 `app/services/llm/providers/` satisfying the `LLMProvider` protocol and register
@@ -111,6 +121,7 @@ when the engine refuses to serve results so the router fails over.
 | Playwright | Real headless Chromium against a **local fixture server**, never Google |
 | Endpoints | `httpx.ASGITransport` with fakes injected through `deps` |
 | The provider fleet | One parametrised sweep over `PROVIDER_SPECS` |
+| Keyring | `tests/fake_keyring.py` — **real** RS256 signing and a real JWKS, because verification is a security control and a stubbed verifier proves only that the stub works |
 
 Google SERP fixtures live in `tests/fixtures/html/` and cover the modern layout,
 the legacy layout, a consent wall, a CAPTCHA interstitial and a no-results page.
@@ -134,6 +145,9 @@ When Google changes its markup, update the fixture and the parser together.
   event loop can be garbage-collected mid-flight. `JobRunner` keeps its own
   reference in `self._tasks` and discards it in a done-callback; there is a test
   that forces a collection to prove it.
+- **Credentials are per caller, resolved per call.** There is no env fallback and
+  no global key. `GET /v1/models` is a different answer for different people, and
+  `tests/unit/test_registry_keyring.py` has the isolation test that pins it.
 - **Background jobs are in-process.** They are lost on restart and are not shared
   between replicas. Swap `JobStore` for a shared implementation if that matters —
   the seam exists for exactly that.

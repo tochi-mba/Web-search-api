@@ -13,6 +13,8 @@ from app.schemas.jobs import JobAccepted
 from app.schemas.search import SearchRequest, SearchResponse
 from app.services.fetch.page import PageFetcher
 from app.services.jobs.runner import JobRunner
+from app.services.keyring.caller import Caller
+from app.services.llm.registry import ModelRegistry
 from app.services.llm.summarizer import Summarizer
 from app.services.pipelines import run_search
 from app.services.search.router import SearchRouter
@@ -36,6 +38,8 @@ async def search(
     summarizer: Annotated[Summarizer, Depends(deps.get_summarizer)],
     concurrency: Annotated[int, Depends(deps.get_max_concurrency)],
     runner: Annotated[JobRunner, Depends(deps.get_job_runner)],
+    registry: Annotated[ModelRegistry, Depends(deps.get_registry)],
+    caller: Annotated[Caller | None, Depends(deps.get_caller)],
 ) -> SearchResponse | JSONResponse:
     """Run a batch of search queries and optionally summarise what comes back.
 
@@ -48,18 +52,24 @@ async def search(
     With ``background`` (or ``async``) set, returns 202 with a job id to poll
     instead of holding the connection open for the whole batch.
     """
-
-    async def work() -> dict[str, object]:
-        response = await run_search(
-            request,
-            search_router=search_router,
-            fetcher=fetcher,
-            summarizer=summarizer,
-            concurrency=concurrency,
-        )
-        return response.model_dump(mode="json")
-
     if request.background:
+        # Resolve the credential now, while the caller's token is still fresh,
+        # and hand the job the result rather than the token: tokens live
+        # minutes and a large batch can outlast one.
+        auth = await deps.resolve_job_auth(registry, request.model, caller)
+
+        async def work() -> dict[str, object]:
+            response = await run_search(
+                request,
+                search_router=search_router,
+                fetcher=fetcher,
+                summarizer=summarizer,
+                concurrency=concurrency,
+                caller=caller,
+                auth=auth,
+            )
+            return response.model_dump(mode="json")
+
         return accepted_response(await runner.submit("search", work))
 
     return await run_search(
@@ -68,4 +78,5 @@ async def search(
         fetcher=fetcher,
         summarizer=summarizer,
         concurrency=concurrency,
+        caller=caller,
     )

@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 
 from app import constants
 from app.core.logging import get_logger
+from app.services.keyring.caller import Caller
+from app.services.keyring.client import ResolvedAuth
 from app.services.llm.base import ChatMessage, ChatRequest
 from app.services.llm.capabilities import resolve_capabilities
 from app.services.llm.prompts import build_summary_prompt
@@ -136,6 +138,8 @@ class Summarizer:
         topic: str | None = None,
         additional_notes: str | None = None,
         sources: list[str] | None = None,
+        caller: Caller | None = None,
+        auth: ResolvedAuth | None = None,
     ) -> Summary:
         """Summarise ``content`` with the requested model.
 
@@ -143,7 +147,7 @@ class Summarizer:
         the resolved model's context window can hold, so a 200K-context model
         truncates harder than a 1M one without the caller doing anything.
         """
-        model = await self._registry.resolve(model_id)
+        model = await self._registry.resolve(model_id, caller)
         capabilities = resolve_capabilities(
             model.model,
             live_context_window=model.context_window,
@@ -185,6 +189,8 @@ class Summarizer:
                 json_mode=True,
             ),
             model_id=model.id,
+            caller=caller,
+            auth=auth,
         )
 
         executive_summary, key_points = parse_summary_payload(response.text)

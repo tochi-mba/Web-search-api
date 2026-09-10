@@ -3,6 +3,7 @@
 import pytest
 
 from app.api import deps
+from app.services.keyring.client import NO_AUTH
 from app.services.llm.base import ChatResponse, ModelInfo
 from app.services.llm.registry import ModelRegistry
 
@@ -14,15 +15,17 @@ class StubProvider:
         self._configured = configured
         self._error = error
 
+    requires_credential = False
+
     def is_configured(self):
         return self._configured
 
-    async def list_models(self):
+    async def list_models(self, auth=NO_AUTH):
         if self._error:
             raise self._error
         return [ModelInfo.build(self.name, m) for m in self._models]
 
-    async def chat(self, request):
+    async def chat(self, request, auth=NO_AUTH):
         return ChatResponse(text="", model=request.model, provider=self.name)
 
 
@@ -112,9 +115,9 @@ async def test_results_are_cached_between_calls(client, registry_with):
     class Counting(StubProvider):
         probes = 0
 
-        async def list_models(self):
+        async def list_models(self, auth=NO_AUTH):
             type(self).probes += 1
-            return await super().list_models()
+            return await super().list_models(auth)
 
     provider = Counting("p", ["m"])
     registry_with(provider)
@@ -127,9 +130,9 @@ async def test_refresh_reprobes(client, registry_with):
     class Counting(StubProvider):
         probes = 0
 
-        async def list_models(self):
+        async def list_models(self, auth=NO_AUTH):
             type(self).probes += 1
-            return await super().list_models()
+            return await super().list_models(auth)
 
     registry_with(Counting("p", ["m"]))
     await client.get("/v1/models")

@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from app.services.keyring.client import ResolvedAuth
 
 
 class ProviderStatus(StrEnum):
@@ -100,17 +103,32 @@ class ChatResponse:
 
 @runtime_checkable
 class LLMProvider(Protocol):
-    """Anything that can list models and answer a chat request."""
+    """Anything that can list models and answer a chat request.
 
-    #: Stable provider key, used as the namespace in model ids.
+    Credentials arrive per call rather than being held on the instance: they
+    belong to whoever is calling, not to this service, so one provider object
+    serves every caller and holds nobody's secret.
+    """
+
+    #: Stable provider key. Doubles as the namespace in model ids and as the
+    #: service name this provider's credential is stored under in keyring.
     name: str
 
+    #: Whether this provider needs a credential at all. Local runtimes do not.
+    requires_credential: bool
+
     def is_configured(self) -> bool:
-        """Whether this provider has the credentials it needs."""
+        """Whether this provider has the non-secret configuration it needs.
+
+        Says nothing about credentials - those are resolved per caller.
+        """
         ...
 
-    async def list_models(self) -> list[ModelInfo]:
+    async def list_models(self, auth: ResolvedAuth) -> list[ModelInfo]:
         """Return every model this provider currently offers.
+
+        Args:
+            auth: What to attach, resolved from keyring for this caller.
 
         Raises:
             Exception: Any failure. The registry classifies it into a
@@ -118,6 +136,6 @@ class LLMProvider(Protocol):
         """
         ...
 
-    async def chat(self, request: ChatRequest) -> ChatResponse:
-        """Run one completion."""
+    async def chat(self, request: ChatRequest, auth: ResolvedAuth) -> ChatResponse:
+        """Run one completion with the caller's credential."""
         ...

@@ -17,6 +17,8 @@ from app.services.fetch.http import HttpFetcher
 from app.services.fetch.page import PageFetcher
 from app.services.jobs.memory import InMemoryJobStore
 from app.services.jobs.runner import JobRunner
+from app.services.keyring.client import KeyringClient
+from app.services.keyring.tokens import TokenVerifier
 from app.services.llm.base import LLMProvider
 from app.services.llm.providers.anthropic import AnthropicProvider
 from app.services.llm.providers.ollama import OllamaProvider
@@ -45,7 +47,8 @@ class Services:
     page_fetcher: PageFetcher
     search_router: SearchRouter
     job_runner: JobRunner
-    anthropic: AnthropicProvider
+    keyring: KeyringClient
+    token_verifier: TokenVerifier
 
     async def aclose(self) -> None:
         """Release every resource, best effort."""
@@ -53,18 +56,15 @@ class Services:
         # leaves no task reaching for a closed client on the way out.
         await self.job_runner.aclose()
         await self.browser.close()
-        await self.anthropic.aclose()
         await self.http_client.aclose()
 
 
-def build_llm_providers(
-    settings: Settings, client: httpx.AsyncClient
-) -> tuple[list[LLMProvider], AnthropicProvider]:
+def build_llm_providers(settings: Settings, client: httpx.AsyncClient) -> list[LLMProvider]:
     """Instantiate every LLM provider this deployment knows about.
 
-    Providers are always constructed; whether they are *usable* is decided by
-    probing, not by configuration, so a wrong key shows up as a status rather
-    than a silently missing vendor.
+    Providers hold no credentials: those belong to whoever is calling and are
+    resolved per request from keyring. So every provider is constructed, and
+    whether it is *usable* is decided per caller by probing.
     """
     disabled = set(settings.disabled_providers)
 
@@ -95,11 +95,14 @@ def build_llm_providers(
             )
         )
 
-    return providers, anthropic
+    return providers
 
 
 def build_search_backends(
-    settings: Settings, client: httpx.AsyncClient, browser: BrowserSession
+    settings: Settings,
+    client: httpx.AsyncClient,
+    browser: BrowserSession,
+    keyring: KeyringClient | None = None,
 ) -> list[SearchBackend]:
     """Instantiate every search backend, in default preference order."""
     return [
@@ -111,7 +114,7 @@ def build_search_backends(
         ),
         SerperSearchBackend(
             client,
-            api_key=settings.serper_api_key,
+            keyring=keyring,
             timeout_seconds=settings.request_timeout_seconds,
         ),
     ]
@@ -131,11 +134,26 @@ def build_services(settings: Settings) -> Services:
         user_agent=settings.user_agent,
     )
 
-    providers, anthropic = build_llm_providers(settings, client)
+    keyring = KeyringClient(
+        client,
+        base_url=settings.keyring_base_url,
+        service_token=settings.keyring_service_token,
+        timeout_seconds=settings.keyring_timeout_seconds,
+    )
+    token_verifier = TokenVerifier(
+        client,
+        base_url=settings.keyring_base_url,
+        audience=settings.keyring_service_name,
+        cache_seconds=settings.jwks_cache_seconds,
+        timeout_seconds=settings.keyring_timeout_seconds,
+    )
+
+    providers = build_llm_providers(settings, client)
     registry = ModelRegistry(
         providers,
         default_model=settings.default_model,
         cache_ttl_seconds=settings.model_cache_ttl_seconds,
+        keyring=keyring,
         probe_timeout_seconds=settings.provider_probe_timeout_seconds,
         max_concurrency=settings.max_concurrency,
     )
@@ -160,7 +178,7 @@ def build_services(settings: Settings) -> Services:
     )
 
     search_router = SearchRouter(
-        build_search_backends(settings, client, browser),
+        build_search_backends(settings, client, browser, keyring),
         preferred=settings.search_backend,
     )
 
@@ -177,6 +195,7 @@ def build_services(settings: Settings) -> Services:
         providers=len(providers),
         default_model=settings.default_model,
         search_backend=settings.search_backend,
+        keyring=settings.keyring_enabled,
     )
 
     return Services(
@@ -187,5 +206,6 @@ def build_services(settings: Settings) -> Services:
         page_fetcher=page_fetcher,
         search_router=search_router,
         job_runner=job_runner,
-        anthropic=anthropic,
+        keyring=keyring,
+        token_verifier=token_verifier,
     )

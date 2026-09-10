@@ -11,6 +11,7 @@ from app.schemas.health import ReadinessComponent
 from app.services.fetch.page import FetchedPage
 from app.services.jobs.memory import InMemoryJobStore
 from app.services.jobs.runner import JobRunner
+from app.services.llm.registry import ModelRegistry
 from app.services.llm.summarizer import Summary
 from app.services.search.base import SearchQuery, SearchResponse, SearchResult
 from app.services.text.extractor import ExtractedContent
@@ -25,7 +26,15 @@ class FakeSummarizer:
         self.error: Exception | None = None
 
     async def summarize(
-        self, content, *, model_id=None, topic=None, additional_notes=None, sources=None
+        self,
+        content,
+        *,
+        model_id=None,
+        topic=None,
+        additional_notes=None,
+        sources=None,
+        caller=None,
+        auth=None,
     ):
         self.calls.append(
             {
@@ -34,6 +43,8 @@ class FakeSummarizer:
                 "topic": topic,
                 "additional_notes": additional_notes,
                 "sources": sources,
+                "caller": caller,
+                "auth": auth,
             }
         )
         if self.error:
@@ -140,13 +151,24 @@ def fake_search():
 
 
 @pytest.fixture
+def registry():
+    """An empty registry.
+
+    These tests fake the summariser, so nothing reaches a real provider. It is
+    present because the routes depend on it to resolve a background job's
+    credential up front.
+    """
+    return ModelRegistry([], default_model="anthropic:claude-opus-5", cache_ttl_seconds=300.0)
+
+
+@pytest.fixture
 def job_runner():
     """A real runner - jobs are the thing under test, so they are not faked."""
     return JobRunner(InMemoryJobStore(retention_seconds=1000.0, max_jobs=100), max_concurrent=4)
 
 
 @pytest.fixture
-def app(fake_summarizer, fake_pages, fake_search, job_runner):
+def app(fake_summarizer, fake_pages, fake_search, job_runner, registry):
     """An app with every external dependency replaced by a fake."""
     application = create_app(make_settings())
     application.dependency_overrides[deps.get_summarizer] = lambda: fake_summarizer
@@ -154,6 +176,8 @@ def app(fake_summarizer, fake_pages, fake_search, job_runner):
     application.dependency_overrides[deps.get_search_router] = lambda: fake_search
     application.dependency_overrides[deps.get_max_concurrency] = lambda: 4
     application.dependency_overrides[deps.get_job_runner] = lambda: job_runner
+    application.dependency_overrides[deps.get_registry] = lambda: registry
+    application.dependency_overrides[deps.get_caller] = lambda: None
     application.dependency_overrides[deps.get_readiness_components] = lambda: [
         ReadinessComponent(name="browser", ready=True, detail="up"),
         ReadinessComponent(name="llm", ready=True, detail="1 model"),

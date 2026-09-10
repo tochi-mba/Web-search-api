@@ -45,6 +45,10 @@ LLM provider is reachable. Returns 200 either way; read the body.
 
 Query parameter `refresh=true` re-probes instead of using the cached catalogue.
 
+**Per caller.** Send `X-Keyring-User-Token` to see the providers that account has
+connected; without it only credential-free runtimes appear. Catalogues are cached
+per `(account, profile)`.
+
 Only models from `available` providers appear. Every model carries the
 capabilities the service resolved for it, so a client can tell in advance
 whether `temperature` will be honoured.
@@ -187,6 +191,20 @@ which polling returns `404`.
 `truncated`, `chars_submitted` and `original_chars` always tell you how much of
 the source the model actually saw. `param_adjustments` records anything the
 capability layer had to drop, rename or translate for the chosen model.
+
+## Caller identity
+
+| Header | Required | Meaning |
+|---|---|---|
+| `X-Keyring-User-Token` | for any credentialed provider | Who the request is for. Verified locally against keyring's published keys. |
+| `X-Keyring-Profile` | no | Which credential set to draw from. Defaults to `WSA_KEYRING_DEFAULT_PROFILE`. |
+
+Every response that depends on credentials — the model catalogue, any
+summarisation — is **specific to this caller**. A request without a token still
+works against providers needing no credential. See [keyring.md](keyring.md).
+
+`401 auth_error` means the token was rejected. `404 not_found_error` on a model
+means that account has no credential for it.
 
 ## Authentication
 

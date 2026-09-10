@@ -34,6 +34,8 @@ from app.schemas.search import (
     SearchResultOut,
 )
 from app.services.fetch.page import FetchedPage, PageFetcher
+from app.services.keyring.caller import Caller
+from app.services.keyring.client import ResolvedAuth
 from app.services.llm.summarizer import Summarizer
 from app.services.search.base import SearchQuery
 from app.services.search.router import SearchRouter
@@ -53,6 +55,8 @@ async def run_search(
     fetcher: PageFetcher,
     summarizer: Summarizer,
     concurrency: int,
+    caller: Caller | None = None,
+    auth: ResolvedAuth | None = None,
 ) -> SearchResponse:
     """Run a batch of search queries and optionally summarise what comes back.
 
@@ -86,7 +90,7 @@ async def run_search(
     if request.summarize:
         for result in results:
             if result.status is ItemStatus.OK and result.results:
-                await _attach_summary(result, request, summarizer)
+                await _attach_summary(result, request, summarizer, caller, auth)
 
     return SearchResponse(results=results)
 
@@ -173,6 +177,8 @@ async def _attach_summary(
     result: SearchQueryResult,
     request: SearchRequest,
     summarizer: Summarizer,
+    caller: Caller | None,
+    auth: ResolvedAuth | None,
 ) -> None:
     """Summarise one query's results in place."""
     query_in = next((q for q in request.queries if q.query == result.query), None)
@@ -188,6 +194,8 @@ async def _attach_summary(
         topic=result.query,
         additional_notes=notes,
         sources=[item.url for item in result.results],
+        caller=caller,
+        auth=auth,
     )
     result.summary = to_summary_out(summary)
 
@@ -203,6 +211,8 @@ async def run_scrape(
     fetcher: PageFetcher,
     summarizer: Summarizer,
     concurrency: int,
+    caller: Caller | None = None,
+    auth: ResolvedAuth | None = None,
 ) -> ScrapeResponse:
     """Fetch each URL, extract its readable content and optionally summarise.
 
@@ -256,6 +266,8 @@ async def run_scrape(
             model_id=request.model,
             additional_notes=request.additional_notes,
             sources=[r.url for r in successful],
+            caller=caller,
+            auth=auth,
         )
         return ScrapeResponse(results=results, summary=to_summary_out(summary))
 
@@ -267,6 +279,8 @@ async def run_scrape(
             topic=result.page.title,
             additional_notes=request.additional_notes,
             sources=[result.url],
+            caller=caller,
+            auth=auth,
         )
         result.summary = to_summary_out(summary)
 
@@ -293,7 +307,13 @@ def _make_fetch(
 # --------------------------------------------------------------------------- #
 
 
-async def run_summarize(request: SummarizeRequest, *, summarizer: Summarizer) -> SummarizeResponse:
+async def run_summarize(
+    request: SummarizeRequest,
+    *,
+    summarizer: Summarizer,
+    caller: Caller | None = None,
+    auth: ResolvedAuth | None = None,
+) -> SummarizeResponse:
     """Summarise text the caller already has."""
     summary = await summarizer.summarize(
         request.text,
@@ -301,5 +321,7 @@ async def run_summarize(request: SummarizeRequest, *, summarizer: Summarizer) ->
         topic=request.topic,
         additional_notes=request.additional_notes,
         sources=list(request.sources) or None,
+        caller=caller,
+        auth=auth,
     )
     return SummarizeResponse(summary=to_summary_out(summary))

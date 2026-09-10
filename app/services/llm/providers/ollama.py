@@ -13,6 +13,7 @@ import os
 import httpx
 
 from app.core.errors import ProviderUnavailableError, TimeoutProblem, UpstreamError
+from app.services.keyring.client import NO_AUTH, ResolvedAuth
 from app.services.llm.base import ChatRequest, ChatResponse, ModelInfo
 from app.services.llm.providers.openai_compatible import OpenAICompatibleProvider
 from app.services.llm.specs import AuthStyle, ProviderKind, ProviderSpec
@@ -29,6 +30,9 @@ class OllamaProvider:
     """Talks to a local (or LAN) Ollama daemon."""
 
     name = PROVIDER_KEY
+
+    #: A local daemon holds no secret, so no caller identity is needed.
+    requires_credential = False
 
     def __init__(
         self,
@@ -69,8 +73,12 @@ class OllamaProvider:
         """Ollama needs no credential, only a base URL."""
         return bool(self._base_url)
 
-    async def list_models(self) -> list[ModelInfo]:
-        """List the models the daemon has pulled locally."""
+    async def list_models(self, auth: ResolvedAuth = NO_AUTH) -> list[ModelInfo]:
+        """List the models the daemon has pulled locally.
+
+        ``auth`` is accepted to satisfy the protocol and ignored: a local daemon
+        has no credential.
+        """
         try:
             response = await self._client.get(f"{self._base_url}{TAGS_PATH}", timeout=self._timeout)
         except httpx.TimeoutException as exc:
@@ -105,6 +113,6 @@ class OllamaProvider:
             )
         return models
 
-    async def chat(self, request: ChatRequest) -> ChatResponse:
+    async def chat(self, request: ChatRequest, auth: ResolvedAuth = NO_AUTH) -> ChatResponse:
         """Run one completion through Ollama's OpenAI-compatible endpoint."""
-        return await self._chat.chat(request)
+        return await self._chat.chat(request, auth)

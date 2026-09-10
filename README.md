@@ -9,9 +9,15 @@ API only. No UI. Designed to sit behind an MCP server.
 
 ```bash
 make install                      # uv sync --all-extras
-cp .env.example .env              # add whichever provider keys you have
+cp .env.example .env              # point it at your keyring
 make run                          # http://localhost:8000/docs
 ```
+
+**Provider keys do not live here.** Every third-party credential is stored in
+[keyring](https://github.com/tochi-mba/keyring-api) and resolved per request for
+the person the request is being made for — so answers are per caller. See
+[docs/keyring.md](docs/keyring.md). Local model runtimes need no credential and
+work without keyring at all.
 
 ---
 
@@ -112,9 +118,11 @@ Models are namespaced `provider:model` — `anthropic:claude-opus-5`,
 `openai:gpt-4o`, `ollama:llama3.1:8b`. The split is on the **first colon only**,
 because Ollama tags legitimately contain colons.
 
-`GET /v1/models` lists only what is reachable. A provider whose key is wrong or
-whose endpoint is down is reported with a status but contributes no models, so
-anything listed can actually be used:
+`GET /v1/models` lists only what is reachable **for you**. Present a keyring user
+token and you get the providers that account has connected; without one you get
+only the runtimes needing no credential. A provider you have not connected, or
+whose credential no longer works, is reported with a status but contributes no
+models, so anything listed can actually be used:
 
 ```json
 {
@@ -223,7 +231,9 @@ Also enforced: robots.txt (per-host, cached), response size caps, redirect
 budgets, a content-type allowlist, and a global plus per-host concurrency limit.
 
 Set `WSA_API_KEYS` to require an API key (`X-API-Key` or `Bearer`). Health
-endpoints stay public so probes keep working.
+endpoints stay public so probes keep working. Note that under keyring the user
+token is the real identity — a caller without one cannot resolve any credential
+— so `WSA_API_KEYS` is a network-level control on top of that, not the primary one.
 
 ---
 
@@ -238,14 +248,18 @@ Every value is optional — see `.env.example` for the full list.
 | `WSA_RESPECT_ROBOTS` | `true` | Honour robots.txt on `/v1/scrape`. |
 | `WSA_ALLOW_PRIVATE_NETWORKS` | `false` | Permit private addresses. Metadata hosts stay blocked. |
 | `WSA_SEARCH_BACKEND` | `google` | Preferred backend. |
-| `WSA_API_KEYS` | *(empty)* | Comma-separated. Empty means unauthenticated. |
+| `WSA_API_KEYS` | *(empty)* | Optional front-door gate. The keyring user token is the real identity. |
+| `WSA_KEYRING_BASE_URL` | *(empty)* | Where the credential vault lives. Empty means local models only. |
+| `WSA_KEYRING_SERVICE_TOKEN` | *(empty)* | This service's own token, as keyring knows it. |
+| `WSA_KEYRING_DEFAULT_PROFILE` | `personal` | Used when no `X-Keyring-Profile` header is sent. |
 | `WSA_MAX_CONCURRENCY` | `8` | Global in-flight limit for batch work. |
 | `WSA_MAX_BACKGROUND_JOBS` | `4` | Concurrent background jobs. |
 | `WSA_JOB_RETENTION_SECONDS` | `3600` | How long a finished job stays readable. |
 
-Provider credentials use each vendor's conventional variable —
-`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY`, and so on. Any provider
-whose key is absent simply does not appear in `/v1/models`.
+Provider credentials are **not** environment variables. They live in keyring,
+under the provider's key as the service name (`anthropic`, `groq`, …), and are
+provisioned with `scripts/provision_keyring.py`. See
+[docs/keyring.md](docs/keyring.md).
 
 ---
 
@@ -265,6 +279,7 @@ rather than `respx`, and why browser tests never touch Google.
 
 Further reading:
 
+- [`docs/keyring.md`](docs/keyring.md) — where credentials live and how to set them up
 - [`AGENTS.md`](AGENTS.md) — conventions and how to extend the codebase
 - [`docs/architecture.md`](docs/architecture.md) — how a request flows through
 - [`docs/providers.md`](docs/providers.md) — adding a provider (one table row)

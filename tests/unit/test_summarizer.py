@@ -1,5 +1,6 @@
 import pytest
 
+from app.services.keyring.client import NO_AUTH
 from app.services.llm.base import ChatResponse, ModelInfo
 from app.services.llm.registry import ModelRegistry
 from app.services.llm.summarizer import Summarizer
@@ -16,16 +17,19 @@ class RecordingProvider:
         self.response_text = response_text
         self.requests = []
 
+    #: Stubs stand in for keyless providers, so no keyring is involved.
+    requires_credential = False
+
     def is_configured(self):
         return True
 
-    async def list_models(self):
+    async def list_models(self, auth=NO_AUTH):
         return [
             ModelInfo.build(self.name, model, context_window=window)
             for model, window in self._models
         ]
 
-    async def chat(self, request):
+    async def chat(self, request, auth=NO_AUTH):
         self.requests.append(request)
         return ChatResponse(
             text=self.response_text,

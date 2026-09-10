@@ -14,7 +14,8 @@ async def client():
 
 
 async def test_every_known_provider_is_constructed(client):
-    providers, _ = build_llm_providers(make_settings(), client)
+    """Providers hold no credentials, so all of them are always built."""
+    providers = build_llm_providers(make_settings(), client)
     names = {p.name for p in providers}
     assert "anthropic" in names
     assert "ollama" in names
@@ -25,7 +26,7 @@ async def test_every_known_provider_is_constructed(client):
 
 async def test_providers_can_be_disabled(client):
     settings = make_settings(disabled_providers=("anthropic", "ollama", "groq"))
-    providers, _ = build_llm_providers(settings, client)
+    providers = build_llm_providers(settings, client)
     names = {p.name for p in providers}
     assert "anthropic" not in names
     assert "ollama" not in names
@@ -37,7 +38,7 @@ async def test_base_url_overrides_are_applied(client):
     from app.services.llm.providers.ollama import OllamaProvider
 
     settings = make_settings(provider_base_urls={"ollama": "http://gpu-box:11434"})
-    providers, _ = build_llm_providers(settings, client)
+    providers = build_llm_providers(settings, client)
     ollama = next(p for p in providers if p.name == "ollama")
     assert isinstance(ollama, OllamaProvider)
     assert ollama._base_url == "http://gpu-box:11434"
@@ -82,6 +83,6 @@ async def test_settings_flow_into_the_registry():
     )
     try:
         assert services.registry.default_model == "openai:gpt-4o"
-        assert services.registry._cache.ttl_seconds == 42.0
+        assert services.registry._cache_ttl == 42.0
     finally:
         await services.aclose()

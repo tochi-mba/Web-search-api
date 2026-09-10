@@ -73,6 +73,23 @@ class Settings(BaseSettings):
     max_concurrency: int = Field(default=8, gt=0)
     max_concurrency_per_host: int = Field(default=2, gt=0)
 
+    # -- Keyring ----------------------------------------------------------- #
+    #: Where the credential vault lives. Empty disables keyring, leaving only
+    #: providers that need no credential usable.
+    keyring_base_url: str = ""
+    keyring_service_token: str = ""
+    keyring_service_name: str = "web-search-api"
+    """This service's name. Must match the audience callers mint tokens for."""
+
+    keyring_default_profile: str = "personal"
+    keyring_timeout_seconds: float = Field(default=10.0, gt=0)
+    jwks_cache_seconds: float = Field(default=3600.0, ge=0)
+
+    @property
+    def keyring_enabled(self) -> bool:
+        """Whether credentials can be resolved at all."""
+        return bool(self.keyring_base_url and self.keyring_service_token)
+
     # -- Background jobs --------------------------------------------------- #
     max_background_jobs: int = Field(default=4, gt=0, description="Concurrent background jobs.")
     job_retention_seconds: float = Field(
@@ -85,7 +102,6 @@ class Settings(BaseSettings):
     # -- Search ----------------------------------------------------------- #
     search_backend: str = "google"
     searxng_base_url: str = ""
-    serper_api_key: str = ""
     browser_headless: bool = True
     browser_navigation_timeout_ms: int = Field(default=20_000, gt=0)
 

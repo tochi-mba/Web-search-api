@@ -75,6 +75,25 @@ network, put a real gateway in front.
 
 ## Credentials
 
-Provider API keys are read from the environment and never logged, never
-returned by any endpoint, and never included in error details. `GET /v1/models`
-reports *whether* a credential worked, never the credential.
+Provider API keys are **not** held by this service. They live in keyring and are
+resolved per request for the person the request is being made for — see
+[keyring.md](keyring.md).
+
+What that buys:
+
+- No third-party secret sits in this service's environment, image or config.
+- One person's key cannot be used to serve another person's request. The account
+  is taken from a signed token, and there is no parameter by which this service
+  could name an account.
+- Keyring returns *what to attach* — a header — never the stored secret, and
+  never a refresh token.
+
+What it does not buy: web-search-api necessarily handles resolved credentials in
+memory to attach them to outgoing calls. It never stores or logs them, and
+`GET /v1/models` reports *whether* a credential worked, never the credential.
+
+User tokens are verified locally against keyring's published JWKS with the
+algorithm pinned to RS256 — an `alg: none` downgrade, a forged signature, an
+expired token and a token minted for a different service are all refused, and
+every failure returns the same message so a caller holding a forged token learns
+nothing from which check failed.

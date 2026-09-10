@@ -62,6 +62,17 @@ Models within one provider are not interchangeable. Rather than scatter
 model accepts and shapes the outgoing body. Adapters stay simple; new model
 quirks are a table row and a test.
 
+### Credentials belong to callers, not to this service
+
+Providers hold no keys. A `ResolvedAuth` — headers and query parameters resolved
+from keyring for one person — is passed into every `list_models` and `chat` call.
+One provider object therefore serves every caller and holds nobody's secret, and
+the catalogue is cached per verified account id rather than globally.
+
+The cost is a coupling: with no environment fallback, keyring being down means no
+credentialed provider works. That was chosen deliberately; `docs/keyring.md`
+states the consequences plainly.
+
 ### Probing, not configuration, decides what is available
 
 `GET /v1/models` reports what responded to a live probe. Trusting configuration

@@ -2,11 +2,19 @@ import httpx
 import pytest
 import respx
 
-from app.core.errors import SearchBlockedError, TimeoutProblem, UpstreamError
+from app.core.errors import (
+    ProviderUnavailableError,
+    SearchBlockedError,
+    TimeoutProblem,
+    UpstreamError,
+)
+from app.services.keyring.caller import Caller
+from app.services.keyring.client import KeyringClient
 from app.services.search.base import SearchQuery, SearchResponse, SearchResult
 from app.services.search.google import GoogleSearchBackend, build_search_url
 from app.services.search.searxng import SearxngSearchBackend
 from app.services.search.serper import SerperSearchBackend
+from tests.fake_keyring import BASE_URL, FakeKeyring
 
 
 class FakeBrowser:
@@ -164,13 +172,54 @@ async def test_searxng_transport_error_raises(client):
 # --- serper backend -------------------------------------------------------- #
 
 
-async def test_serper_requires_an_api_key(client):
-    assert await SerperSearchBackend(client, api_key="").is_configured() is False
-    assert await SerperSearchBackend(client, api_key="k").is_configured() is True
+@pytest.fixture
+def vault():
+    return FakeKeyring()
+
+
+@pytest.fixture
+def serper(client, vault):
+    """A Serper backend bound to a caller whose key lives in keyring."""
+    keyring = KeyringClient(client, base_url=BASE_URL, service_token="svc")
+    caller = Caller(account_id="acct-1", profile="personal", user_token=vault.token())
+    return SerperSearchBackend(client, keyring=keyring, caller=caller)
+
+
+def connected(vault, key="serper-key"):
+    vault.connect("serper", headers={"X-API-KEY": key})
 
 
 @respx.mock
-async def test_serper_parses_organic_results(client):
+async def test_serper_is_configured_only_once_connected(serper, vault):
+    vault.install(respx.mock)
+    assert await serper.is_configured() is False
+
+    connected(vault)
+    assert await serper.is_configured() is True
+
+
+async def test_serper_without_a_caller_is_not_configured(client):
+    assert await SerperSearchBackend(client).is_configured() is False
+
+
+@respx.mock
+async def test_for_caller_rebinds_the_credential(client, vault):
+    """Two people using the same deployment use their own Serper accounts."""
+    vault.install(respx.mock)
+    vault.connect("serper", account_id="acct-2")
+
+    keyring = KeyringClient(client, base_url=BASE_URL, service_token="svc")
+    other = Caller(account_id="acct-2", profile="personal", user_token=vault.token("acct-2"))
+    bound = SerperSearchBackend(client, keyring=keyring).for_caller(other)
+
+    assert await bound.is_configured() is True
+    assert await SerperSearchBackend(client, keyring=keyring).is_configured() is False
+
+
+@respx.mock
+async def test_serper_parses_organic_results(serper, vault):
+    vault.install(respx.mock)
+    connected(vault)
     respx.post("https://google.serper.dev/search").mock(
         return_value=httpx.Response(
             200,
@@ -182,48 +231,64 @@ async def test_serper_parses_organic_results(client):
             },
         )
     )
-    backend = SerperSearchBackend(client, api_key="k")
-    response = await backend.search(SearchQuery(query="x"))
+    response = await serper.search(SearchQuery(query="x"))
     assert len(response.results) == 2
     assert response.results[1].rank == 2
 
 
 @respx.mock
-async def test_serper_sends_the_api_key(client):
+async def test_the_key_keyring_resolved_is_sent(serper, vault):
+    vault.install(respx.mock)
+    connected(vault, key="the-real-key")
     route = respx.post("https://google.serper.dev/search").mock(
         return_value=httpx.Response(200, json={"organic": []})
     )
-    await SerperSearchBackend(client, api_key="secret").search(SearchQuery(query="x"))
-    assert route.calls[0].request.headers["x-api-key"] == "secret"
+    await serper.search(SearchQuery(query="x"))
+    assert route.calls[0].request.headers["x-api-key"] == "the-real-key"
 
 
 @respx.mock
-async def test_serper_skips_entries_without_a_link(client):
+async def test_searching_without_a_connection_is_refused(serper, vault):
+    vault.install(respx.mock)
+    with pytest.raises(ProviderUnavailableError, match="not connected"):
+        await serper.search(SearchQuery(query="x"))
+
+
+@respx.mock
+async def test_serper_skips_entries_without_a_link(serper, vault):
+    vault.install(respx.mock)
+    connected(vault)
     respx.post("https://google.serper.dev/search").mock(
         return_value=httpx.Response(200, json={"organic": [{"title": "No link"}]})
     )
-    assert (await SerperSearchBackend(client, api_key="k").search(SearchQuery(query="x"))).is_empty
+    assert (await serper.search(SearchQuery(query="x"))).is_empty
 
 
 @respx.mock
-async def test_serper_error_status_raises(client):
+async def test_serper_error_status_raises(serper, vault):
+    vault.install(respx.mock)
+    connected(vault)
     respx.post("https://google.serper.dev/search").mock(return_value=httpx.Response(403))
     with pytest.raises(UpstreamError):
-        await SerperSearchBackend(client, api_key="k").search(SearchQuery(query="x"))
+        await serper.search(SearchQuery(query="x"))
 
 
 @respx.mock
-async def test_serper_timeout_raises(client):
+async def test_serper_timeout_raises(serper, vault):
+    vault.install(respx.mock)
+    connected(vault)
     respx.post("https://google.serper.dev/search").mock(side_effect=httpx.ReadTimeout("s"))
     with pytest.raises(TimeoutProblem):
-        await SerperSearchBackend(client, api_key="k").search(SearchQuery(query="x"))
+        await serper.search(SearchQuery(query="x"))
 
 
 @respx.mock
-async def test_serper_transport_error_raises(client):
+async def test_serper_transport_error_raises(serper, vault):
+    vault.install(respx.mock)
+    connected(vault)
     respx.post("https://google.serper.dev/search").mock(side_effect=httpx.ConnectError("d"))
     with pytest.raises(UpstreamError):
-        await SerperSearchBackend(client, api_key="k").search(SearchQuery(query="x"))
+        await serper.search(SearchQuery(query="x"))
 
 
 # --- shared dataclass behaviour -------------------------------------------- #

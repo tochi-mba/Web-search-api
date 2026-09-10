@@ -120,6 +120,10 @@ async def test_invalid_json_maps_to_upstream(provider):
         await provider.list_models()
 
 
+def test_ollama_needs_no_credential(provider):
+    assert provider.requires_credential is False
+
+
 @respx.mock
 async def test_chat_goes_through_the_openai_shim(provider):
     route = respx.post(CHAT_URL).mock(

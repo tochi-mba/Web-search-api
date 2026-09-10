@@ -15,6 +15,7 @@ from app.core.errors import (
     RateLimitedError,
     ValidationProblem,
 )
+from app.services.keyring.client import NO_AUTH
 from app.services.llm.base import (
     ChatMessage,
     ChatRequest,
@@ -34,17 +35,20 @@ class StubProvider:
         self._delay = delay
         self.chat_calls = []
 
+    #: Stubs stand in for keyless providers unless a test says otherwise.
+    requires_credential = False
+
     def is_configured(self):
         return self._configured
 
-    async def list_models(self):
+    async def list_models(self, auth=NO_AUTH):
         if self._delay:
             await asyncio.sleep(self._delay)
         if self._error:
             raise self._error
         return [ModelInfo.build(self.name, m) for m in self._models]
 
-    async def chat(self, request):
+    async def chat(self, request, auth=NO_AUTH):
         self.chat_calls.append(request)
         return ChatResponse(text="summary", model=request.model, provider=self.name)
 
@@ -151,9 +155,9 @@ class CountingProvider(StubProvider):
         super().__init__(name, **kwargs)
         self.probe_count = 0
 
-    async def list_models(self):
+    async def list_models(self, auth=NO_AUTH):
         self.probe_count += 1
-        return await super().list_models()
+        return await super().list_models(auth)
 
 
 async def test_catalog_is_cached():

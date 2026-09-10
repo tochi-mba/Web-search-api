@@ -13,6 +13,8 @@ from app.schemas.jobs import JobAccepted
 from app.schemas.scrape import ScrapeRequest, ScrapeResponse
 from app.services.fetch.page import PageFetcher
 from app.services.jobs.runner import JobRunner
+from app.services.keyring.caller import Caller
+from app.services.llm.registry import ModelRegistry
 from app.services.llm.summarizer import Summarizer
 from app.services.pipelines import run_scrape
 
@@ -34,6 +36,8 @@ async def scrape(
     summarizer: Annotated[Summarizer, Depends(deps.get_summarizer)],
     concurrency: Annotated[int, Depends(deps.get_max_concurrency)],
     runner: Annotated[JobRunner, Depends(deps.get_job_runner)],
+    registry: Annotated[ModelRegistry, Depends(deps.get_registry)],
+    caller: Annotated[Caller | None, Depends(deps.get_caller)],
 ) -> ScrapeResponse | JSONResponse:
     """Fetch each URL, extract its readable content and optionally summarise.
 
@@ -43,16 +47,28 @@ async def scrape(
     With ``background`` (or ``async``) set, returns 202 with a job id to poll
     instead of holding the connection open for the whole batch.
     """
-
-    async def work() -> dict[str, object]:
-        response = await run_scrape(
-            request, fetcher=fetcher, summarizer=summarizer, concurrency=concurrency
-        )
-        return response.model_dump(mode="json")
-
     if request.background:
+        # Resolved now rather than in the job: a user token lives minutes and a
+        # twenty-URL batch can outlast one.
+        auth = await deps.resolve_job_auth(registry, request.model, caller)
+
+        async def work() -> dict[str, object]:
+            response = await run_scrape(
+                request,
+                fetcher=fetcher,
+                summarizer=summarizer,
+                concurrency=concurrency,
+                caller=caller,
+                auth=auth,
+            )
+            return response.model_dump(mode="json")
+
         return accepted_response(await runner.submit("scrape", work))
 
     return await run_scrape(
-        request, fetcher=fetcher, summarizer=summarizer, concurrency=concurrency
+        request,
+        fetcher=fetcher,
+        summarizer=summarizer,
+        concurrency=concurrency,
+        caller=caller,
     )

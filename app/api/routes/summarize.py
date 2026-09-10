@@ -12,6 +12,8 @@ from app.api.jobs_support import accepted_response
 from app.schemas.jobs import JobAccepted
 from app.schemas.scrape import SummarizeRequest, SummarizeResponse
 from app.services.jobs.runner import JobRunner
+from app.services.keyring.caller import Caller
+from app.services.llm.registry import ModelRegistry
 from app.services.llm.summarizer import Summarizer
 from app.services.pipelines import run_summarize
 
@@ -31,6 +33,8 @@ async def summarize(
     request: SummarizeRequest,
     summarizer: Annotated[Summarizer, Depends(deps.get_summarizer)],
     runner: Annotated[JobRunner, Depends(deps.get_job_runner)],
+    registry: Annotated[ModelRegistry, Depends(deps.get_registry)],
+    caller: Annotated[Caller | None, Depends(deps.get_caller)],
 ) -> SummarizeResponse | JSONResponse:
     """Summarise text the caller already has.
 
@@ -39,12 +43,13 @@ async def summarize(
 
     With ``background`` (or ``async``) set, returns 202 with a job id to poll.
     """
-
-    async def work() -> dict[str, object]:
-        response = await run_summarize(request, summarizer=summarizer)
-        return response.model_dump(mode="json")
-
     if request.background:
+        auth = await deps.resolve_job_auth(registry, request.model, caller)
+
+        async def work() -> dict[str, object]:
+            response = await run_summarize(request, summarizer=summarizer, caller=caller, auth=auth)
+            return response.model_dump(mode="json")
+
         return accepted_response(await runner.submit("summarize", work))
 
-    return await run_summarize(request, summarizer=summarizer)
+    return await run_summarize(request, summarizer=summarizer, caller=caller)

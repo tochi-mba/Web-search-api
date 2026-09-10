@@ -52,10 +52,11 @@ class ProviderSpec:
     """Everything needed to talk to one OpenAI-compatible provider."""
 
     key: str
+    """Also the service name this provider's credential is stored under in keyring."""
+
     label: str
     base_url: str
     kind: ProviderKind = ProviderKind.INFERENCE
-    api_key_env: str | None = None
     auth: AuthStyle = AuthStyle.BEARER
     auth_header: str | None = None
     models_path: str = "/models"
@@ -67,8 +68,26 @@ class ProviderSpec:
 
     @property
     def requires_key(self) -> bool:
-        """Whether this provider needs a credential to work."""
-        return self.auth is not AuthStyle.NONE and self.api_key_env is not None
+        """Whether this provider needs a credential to work.
+
+        False for local runtimes, which have no secret for keyring to hold and
+        so are usable without a caller identity at all.
+        """
+        return self.auth is not AuthStyle.NONE
+
+    @property
+    def default_header(self) -> str:
+        """Header this provider expects its key on, for provisioning keyring."""
+        if self.auth is AuthStyle.HEADER and self.auth_header:
+            return self.auth_header
+        return "Authorization"
+
+    @property
+    def default_template(self) -> str:
+        """Template keyring should store the key under, for provisioning."""
+        if self.auth is AuthStyle.BEARER:
+            return "Bearer {value}"
+        return "{value}"
 
 
 def _spec(key: str, label: str, base_url: str, **kwargs: object) -> ProviderSpec:
@@ -85,137 +104,113 @@ L = ProviderKind.LOCAL
 #: Every OpenAI-compatible provider this service knows about.
 OPENAI_COMPATIBLE_SPECS: tuple[ProviderSpec, ...] = (
     # ------------------------------------------------------------- frontier labs
-    _spec("openai", "OpenAI", "https://api.openai.com/v1", kind=F, api_key_env="OPENAI_API_KEY"),
+    _spec("openai", "OpenAI", "https://api.openai.com/v1", kind=F),
     _spec(
         "gemini",
         "Google Gemini",
         "https://generativelanguage.googleapis.com/v1beta/openai",
         kind=F,
-        api_key_env="GEMINI_API_KEY",
         docs_url="https://ai.google.dev/gemini-api/docs/openai",
     ),
-    _spec("mistral", "Mistral", "https://api.mistral.ai/v1", kind=F, api_key_env="MISTRAL_API_KEY"),
-    _spec(
-        "deepseek", "DeepSeek", "https://api.deepseek.com", kind=F, api_key_env="DEEPSEEK_API_KEY"
-    ),
-    _spec("xai", "xAI Grok", "https://api.x.ai/v1", kind=F, api_key_env="XAI_API_KEY"),
+    _spec("mistral", "Mistral", "https://api.mistral.ai/v1", kind=F),
+    _spec("deepseek", "DeepSeek", "https://api.deepseek.com", kind=F),
+    _spec("xai", "xAI Grok", "https://api.x.ai/v1", kind=F),
     _spec(
         "cohere",
         "Cohere",
         "https://api.cohere.ai/compatibility/v1",
         kind=F,
-        api_key_env="COHERE_API_KEY",
     ),
     _spec(
         "moonshot",
         "Moonshot Kimi",
         "https://api.moonshot.ai/v1",
         kind=F,
-        api_key_env="MOONSHOT_API_KEY",
     ),
-    _spec("zai", "Z.AI GLM", "https://api.z.ai/api/paas/v4", kind=F, api_key_env="ZAI_API_KEY"),
+    _spec("zai", "Z.AI GLM", "https://api.z.ai/api/paas/v4", kind=F),
     _spec(
         "dashscope",
         "Alibaba DashScope (Qwen)",
         "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
         kind=F,
-        api_key_env="DASHSCOPE_API_KEY",
     ),
     _spec(
         "meta_llama",
         "Meta Llama API",
         "https://api.llama.com/compat/v1",
         kind=F,
-        api_key_env="LLAMA_API_KEY",
     ),
-    _spec(
-        "ai21", "AI21 Labs", "https://api.ai21.com/studio/v1", kind=F, api_key_env="AI21_API_KEY"
-    ),
+    _spec("ai21", "AI21 Labs", "https://api.ai21.com/studio/v1", kind=F),
     # -------------------------------------------------------- fast inference
-    _spec("groq", "Groq", "https://api.groq.com/openai/v1", api_key_env="GROQ_API_KEY"),
-    _spec("cerebras", "Cerebras", "https://api.cerebras.ai/v1", api_key_env="CEREBRAS_API_KEY"),
-    _spec("together", "Together AI", "https://api.together.xyz/v1", api_key_env="TOGETHER_API_KEY"),
+    _spec("groq", "Groq", "https://api.groq.com/openai/v1"),
+    _spec("cerebras", "Cerebras", "https://api.cerebras.ai/v1"),
+    _spec("together", "Together AI", "https://api.together.xyz/v1"),
     _spec(
         "fireworks",
         "Fireworks AI",
         "https://api.fireworks.ai/inference/v1",
-        api_key_env="FIREWORKS_API_KEY",
     ),
-    _spec("sambanova", "SambaNova", "https://api.sambanova.ai/v1", api_key_env="SAMBANOVA_API_KEY"),
+    _spec("sambanova", "SambaNova", "https://api.sambanova.ai/v1"),
     _spec(
         "deepinfra",
         "DeepInfra",
         "https://api.deepinfra.com/v1/openai",
-        api_key_env="DEEPINFRA_API_KEY",
     ),
     _spec(
         "hyperbolic",
         "Hyperbolic",
         "https://api.hyperbolic.xyz/v1",
-        api_key_env="HYPERBOLIC_API_KEY",
     ),
     _spec(
         "nebius",
         "Nebius AI Studio",
         "https://api.studio.nebius.ai/v1",
-        api_key_env="NEBIUS_API_KEY",
     ),
-    _spec("novita", "Novita AI", "https://api.novita.ai/openai", api_key_env="NOVITA_API_KEY"),
-    _spec("baseten", "Baseten", "https://inference.baseten.co/v1", api_key_env="BASETEN_API_KEY"),
-    _spec("lambda_ai", "Lambda", "https://api.lambda.ai/v1", api_key_env="LAMBDA_API_KEY"),
+    _spec("novita", "Novita AI", "https://api.novita.ai/openai"),
+    _spec("baseten", "Baseten", "https://inference.baseten.co/v1"),
+    _spec("lambda_ai", "Lambda", "https://api.lambda.ai/v1"),
     _spec(
         "featherless",
         "Featherless AI",
         "https://api.featherless.ai/v1",
-        api_key_env="FEATHERLESS_API_KEY",
     ),
-    _spec("nscale", "Nscale", "https://inference.api.nscale.com/v1", api_key_env="NSCALE_API_KEY"),
+    _spec("nscale", "Nscale", "https://inference.api.nscale.com/v1"),
     _spec(
         "friendli",
         "FriendliAI",
         "https://api.friendli.ai/serverless/v1",
-        api_key_env="FRIENDLI_TOKEN",
     ),
-    _spec(
-        "nvidia", "NVIDIA NIM", "https://integrate.api.nvidia.com/v1", api_key_env="NVIDIA_API_KEY"
-    ),
+    _spec("nvidia", "NVIDIA NIM", "https://integrate.api.nvidia.com/v1"),
     _spec(
         "anyscale",
         "Anyscale",
         "https://api.endpoints.anyscale.com/v1",
-        api_key_env="ANYSCALE_API_KEY",
     ),
-    _spec("chutes", "Chutes", "https://llm.chutes.ai/v1", api_key_env="CHUTES_API_KEY"),
+    _spec("chutes", "Chutes", "https://llm.chutes.ai/v1"),
     _spec(
         "modelscope",
         "ModelScope",
         "https://api-inference.modelscope.cn/v1",
-        api_key_env="MODELSCOPE_API_KEY",
     ),
     _spec(
         "inception",
         "Inception Labs",
         "https://api.inceptionlabs.ai/v1",
-        api_key_env="INCEPTION_API_KEY",
     ),
-    _spec(
-        "wandb", "W&B Inference", "https://api.inference.wandb.ai/v1", api_key_env="WANDB_API_KEY"
-    ),
+    _spec("wandb", "W&B Inference", "https://api.inference.wandb.ai/v1"),
     _spec(
         "clarifai",
         "Clarifai",
         "https://api.clarifai.com/v2/ext/openai/v1",
-        api_key_env="CLARIFAI_PAT",
     ),
-    _spec("publicai", "PublicAI", "https://api.publicai.co/v1", api_key_env="PUBLICAI_API_KEY"),
-    _spec("galadriel", "Galadriel", "https://api.galadriel.ai/v1", api_key_env="GALADRIEL_API_KEY"),
+    _spec("publicai", "PublicAI", "https://api.publicai.co/v1"),
+    _spec("galadriel", "Galadriel", "https://api.galadriel.ai/v1"),
     # -------------------------------------------------------------- aggregators
     _spec(
         "openrouter",
         "OpenRouter",
         "https://openrouter.ai/api/v1",
         kind=A,
-        api_key_env="OPENROUTER_API_KEY",
         docs_url="https://openrouter.ai/docs/quickstart",
     ),
     _spec(
@@ -223,7 +218,6 @@ OPENAI_COMPATIBLE_SPECS: tuple[ProviderSpec, ...] = (
         "Perplexity",
         "https://api.perplexity.ai",
         kind=A,
-        api_key_env="PERPLEXITY_API_KEY",
         static_models=("sonar", "sonar-pro", "sonar-reasoning", "sonar-reasoning-pro"),
     ),
     _spec(
@@ -231,28 +225,23 @@ OPENAI_COMPATIBLE_SPECS: tuple[ProviderSpec, ...] = (
         "Vercel AI Gateway",
         "https://ai-gateway.vercel.sh/v1",
         kind=A,
-        api_key_env="VERCEL_AI_GATEWAY_KEY",
     ),
     _spec(
         "helicone",
         "Helicone Gateway",
         "https://ai-gateway.helicone.ai",
         kind=A,
-        api_key_env="HELICONE_API_KEY",
     ),
     _spec(
         "github_models",
         "GitHub Models",
         "https://models.github.ai/inference",
         kind=A,
-        api_key_env="GITHUB_TOKEN",
     ),
-    _spec("poe", "Poe", "https://api.poe.com/v1", kind=A, api_key_env="POE_API_KEY"),
-    _spec(
-        "nano_gpt", "Nano-GPT", "https://nano-gpt.com/api/v1", kind=A, api_key_env="NANOGPT_API_KEY"
-    ),
-    _spec("v0", "Vercel v0", "https://api.v0.dev/v1", kind=A, api_key_env="V0_API_KEY"),
-    _spec("morph", "Morph", "https://api.morphllm.com/v1", kind=A, api_key_env="MORPH_API_KEY"),
+    _spec("poe", "Poe", "https://api.poe.com/v1", kind=A),
+    _spec("nano_gpt", "Nano-GPT", "https://nano-gpt.com/api/v1", kind=A),
+    _spec("v0", "Vercel v0", "https://api.v0.dev/v1", kind=A),
+    _spec("morph", "Morph", "https://api.morphllm.com/v1", kind=A),
     # ------------------------------------------------------------ local runtimes
     _spec(
         "lmstudio",

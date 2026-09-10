@@ -13,6 +13,7 @@ from app.schemas.models import (
     ModelsResponse,
     ProviderOut,
 )
+from app.services.keyring.caller import Caller
 from app.services.llm.capabilities import resolve_capabilities
 from app.services.llm.registry import ModelRegistry
 
@@ -22,17 +23,22 @@ router = APIRouter(prefix="/v1", tags=["models"])
 @router.get("/models", response_model=ModelsResponse, summary="List available models")
 async def list_models(
     registry: Annotated[ModelRegistry, Depends(deps.get_registry)],
+    caller: Annotated[Caller | None, Depends(deps.get_caller)],
     refresh: Annotated[
         bool, Query(description="Re-probe providers instead of using the cache.")
     ] = False,
 ) -> ModelsResponse:
-    """List every model that is reachable right now.
+    """List every model reachable right now, for this caller.
 
-    Providers whose credential is wrong or whose endpoint is down are reported
-    with their status but contribute no models, so anything listed here can
-    actually be used.
+    Credentials belong to people, so this answer is per caller: present a
+    keyring user token and you get the providers *you* have connected. Without
+    one, only providers needing no credential appear.
+
+    Providers you have not connected, or whose credential no longer works, are
+    reported with their status but contribute no models - so anything listed
+    here can actually be used.
     """
-    catalog = await registry.catalog(refresh=refresh)
+    catalog = await registry.catalog(caller, refresh=refresh)
 
     models = []
     for model in catalog.models:

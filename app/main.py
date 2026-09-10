@@ -92,6 +92,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.page_fetcher = services.page_fetcher
     app.state.search_router = services.search_router
     app.state.job_runner = services.job_runner
+    app.state.keyring = services.keyring
+    app.state.token_verifier = services.token_verifier
 
     # The browser starts lazily on first use, so readiness reflects whether a
     # browser could be launched at all rather than whether one is running.
