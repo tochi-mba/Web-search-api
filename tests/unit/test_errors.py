@@ -66,3 +66,13 @@ def test_subclass_may_declare_an_explicit_code():
 
 def test_subclass_inherits_status_from_its_parent():
     assert errors.SearchBlockedError("t").status == 502
+
+
+def test_str_includes_the_detail_when_it_adds_information():
+    assert str(errors.UpstreamError("boom", detail="origin timed out")) == (
+        "boom: origin timed out"
+    )
+
+
+def test_str_is_just_the_title_when_detail_adds_nothing():
+    assert str(errors.UpstreamError("boom")) == "boom"

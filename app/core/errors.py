@@ -40,9 +40,11 @@ class DomainError(Exception):
             detail: Explanation specific to this occurrence. Defaults to ``title``.
             instance: URI reference identifying the specific occurrence.
         """
-        super().__init__(title)
         self.title = title
         self.detail = detail if detail is not None else title
+        # Include the detail in args so tracebacks and logs carry the specifics,
+        # not just the generic problem class.
+        super().__init__(title if self.detail == title else f"{title}: {self.detail}")
         self.instance = instance
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
