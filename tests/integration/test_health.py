@@ -72,10 +72,17 @@ async def test_unknown_path_returns_problem_json(client):
     assert response.json()["code"] == "http_error"
 
 
-async def test_lifespan_initialises_and_tears_down_state(settings):
+async def test_lifespan_builds_and_releases_every_service(settings):
+    """The composition root must wire everything the routes depend on."""
     from app.main import create_app as _create_app
     from app.main import lifespan
 
     application = _create_app(settings)
     async with lifespan(application):
-        assert application.state.browser_available is False
+        assert application.state.model_registry is not None
+        assert application.state.summarizer is not None
+        assert application.state.page_fetcher is not None
+        assert application.state.search_router is not None
+        assert application.state.browser_available is True
+    # Teardown released the client without raising.
+    assert application.state.services.http_client.is_closed

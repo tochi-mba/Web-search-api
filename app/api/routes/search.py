@@ -1,0 +1,173 @@
+"""The search endpoint."""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends
+
+from app.api import deps
+from app.api.mapping import to_summary_out
+from app.core.concurrency import bounded_gather
+from app.core.errors import DomainError
+from app.core.logging import get_logger
+from app.schemas.common import ErrorPayload, ItemStatus
+from app.schemas.search import (
+    SearchQueryIn,
+    SearchQueryResult,
+    SearchRequest,
+    SearchResponse,
+    SearchResultOut,
+)
+from app.services.fetch.page import PageFetcher
+from app.services.llm.summarizer import Summarizer
+from app.services.search.base import SearchQuery
+from app.services.search.router import SearchRouter
+
+logger = get_logger(__name__)
+
+router = APIRouter(prefix="/v1", tags=["search"])
+
+
+@router.post("/search", response_model=SearchResponse, summary="Search and summarise")
+async def search(
+    request: SearchRequest,
+    search_router: Annotated[SearchRouter, Depends(deps.get_search_router)],
+    fetcher: Annotated[PageFetcher, Depends(deps.get_page_fetcher)],
+    summarizer: Annotated[Summarizer, Depends(deps.get_summarizer)],
+    concurrency: Annotated[int, Depends(deps.get_max_concurrency)],
+) -> SearchResponse:
+    """Run a batch of search queries and optionally summarise what comes back.
+
+    By default the summary is built from result titles and snippets, which is
+    fast and cheap. Set ``fetch_pages`` to also scrape the top result pages and
+    summarise their full text instead.
+
+    One failing query never fails the batch: each result carries its own status.
+    """
+    outcomes = await bounded_gather(
+        [_make_query_runner(search_router, query, request) for query in request.queries],
+        limit=concurrency,
+    )
+
+    results: list[SearchQueryResult] = []
+    for query, outcome in zip(request.queries, outcomes, strict=True):
+        if isinstance(outcome, DomainError):
+            results.append(
+                SearchQueryResult(
+                    query=query.query,
+                    status=ItemStatus.ERROR,
+                    error=ErrorPayload(**outcome.to_error_payload()),
+                )
+            )
+            continue
+        results.append(outcome)
+
+    if request.fetch_pages:
+        await _attach_page_contents(results, request, fetcher, concurrency)
+
+    if request.summarize:
+        for result in results:
+            if result.status is ItemStatus.OK and result.results:
+                await _attach_summary(result, request, summarizer)
+
+    return SearchResponse(results=results)
+
+
+async def _attach_page_contents(
+    results: list[SearchQueryResult],
+    request: SearchRequest,
+    fetcher: PageFetcher,
+    concurrency: int,
+) -> None:
+    """Scrape the top result pages so summaries see full text, not snippets.
+
+    A page that cannot be fetched simply keeps its snippet: deep fetching is an
+    enrichment, and one dead link should not degrade the whole query.
+    """
+    targets: list[SearchResultOut] = [
+        item
+        for result in results
+        if result.status is ItemStatus.OK
+        for item in result.results[: request.max_pages]
+    ]
+    if not targets:
+        return
+
+    pages = await bounded_gather(
+        [_make_page_fetch(fetcher, item.url) for item in targets], limit=concurrency
+    )
+    for item, text in zip(targets, pages, strict=True):
+        if text:
+            item.content = text
+
+
+def _make_page_fetch(fetcher: PageFetcher, url: str):  # type: ignore[no-untyped-def] # noqa: ANN202
+    """Build a coroutine factory returning page text, or None on failure."""
+
+    async def run() -> str | None:
+        try:
+            page = await fetcher.fetch(url)
+        except DomainError as exc:
+            logger.info("search.page_fetch_failed", url=url, code=exc.code)
+            return None
+        return page.content.text or None
+
+    return run
+
+
+def _make_query_runner(search_router: SearchRouter, query: SearchQueryIn, request: SearchRequest):  # type: ignore[no-untyped-def] # noqa: ANN202
+    """Build a coroutine factory running one query without raising."""
+
+    async def run() -> object:
+        try:
+            response = await search_router.search(
+                SearchQuery(
+                    query=query.query,
+                    max_results=query.max_results,
+                    site=query.site,
+                    language=request.language,
+                    region=request.region,
+                    safe_search=request.safe_search,
+                )
+            )
+        except DomainError as exc:
+            logger.info("search.query_failed", query=query.query, code=exc.code)
+            return exc
+
+        return SearchQueryResult(
+            query=query.query,
+            status=ItemStatus.OK,
+            backend=response.backend,
+            results=[
+                SearchResultOut(
+                    title=item.title, url=item.url, snippet=item.snippet, rank=item.rank
+                )
+                for item in response.results
+            ],
+        )
+
+    return run
+
+
+async def _attach_summary(
+    result: SearchQueryResult,
+    request: SearchRequest,
+    summarizer: Summarizer,
+) -> None:
+    """Summarise one query's results in place."""
+    query_in = next((q for q in request.queries if q.query == result.query), None)
+    notes = (query_in.additional_notes if query_in else None) or request.additional_notes
+
+    content = "\n\n".join(
+        f"## {item.title}\n{item.url}\n{item.content or item.snippet}" for item in result.results
+    )
+
+    summary = await summarizer.summarize(
+        content,
+        model_id=request.model,
+        topic=result.query,
+        additional_notes=notes,
+        sources=[item.url for item in result.results],
+    )
+    result.summary = to_summary_out(summary)

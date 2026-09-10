@@ -11,10 +11,12 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
+from app.bootstrap import build_services
 from app.config import Settings, get_settings
 from app.core.errors import DomainError, ValidationProblem
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import build_auth_middleware, request_context_middleware
+from app.services.fetch.browser import resolve_executable_path
 
 logger = get_logger(__name__)
 
@@ -82,10 +84,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start and stop long-lived resources shared by all requests."""
     settings: Settings = app.state.settings
     logger.info("service.starting", service=settings.service_name, version=__version__)
-    app.state.browser_available = False
+
+    services = build_services(settings)
+    app.state.services = services
+    app.state.model_registry = services.registry
+    app.state.summarizer = services.summarizer
+    app.state.page_fetcher = services.page_fetcher
+    app.state.search_router = services.search_router
+
+    # The browser starts lazily on first use, so readiness reflects whether a
+    # browser could be launched at all rather than whether one is running.
+    app.state.browser_available = resolve_executable_path() is not None or settings.browser_headless
+
     try:
         yield
     finally:
+        await services.aclose()
         logger.info("service.stopped", service=settings.service_name)
 
 
@@ -117,9 +131,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(Exception, unhandled_error_handler)
 
-    from app.api.routes import health
+    from app.api.routes import health, models, scrape, search, summarize
 
     app.include_router(health.router)
+    app.include_router(models.router)
+    app.include_router(search.router)
+    app.include_router(scrape.router)
+    app.include_router(summarize.router)
     return app
 
 
