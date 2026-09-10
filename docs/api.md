@@ -103,6 +103,70 @@ Text in, summary out — a direct hook for an MCP server or another service.
 | `topic` | — | What the reader was looking for |
 | `sources[]` | `[]` | URLs listed to the model for context |
 
+## Background mode
+
+`/v1/search`, `/v1/scrape` and `/v1/summarize` all accept a `background` flag,
+also spelled `async`. With it set the endpoint returns `202` immediately:
+
+```json
+{
+  "job_id": "f8c0340681104c648c7e9e860d8b4af6",
+  "kind": "scrape",
+  "status": "queued",
+  "poll_url": "/v1/jobs/f8c0340681104c648c7e9e860d8b4af6",
+  "created_at": 1757523481.42
+}
+```
+
+The `Location` header carries the same `poll_url`, and `Retry-After` suggests a
+polling interval in seconds.
+
+### `GET /v1/jobs/{job_id}`
+
+```json
+{
+  "id": "f8c0340681104c648c7e9e860d8b4af6",
+  "kind": "scrape",
+  "status": "succeeded",
+  "created_at": 1757523481.42,
+  "started_at": 1757523481.43,
+  "finished_at": 1757523482.17,
+  "duration_seconds": 0.742,
+  "result": {"results": ["..."], "summary": null},
+  "error": null
+}
+```
+
+`status` is `queued`, `running`, `succeeded`, `failed` or `cancelled`.
+`Retry-After` is sent while the job is not yet terminal.
+
+**`result` is byte-identical to what the synchronous endpoint would have
+returned** for that request, so a client can switch modes without changing how
+it parses the answer.
+
+On failure, `result` is `null` and `error` carries the same
+`{code, title, detail}` object used by batch items. A per-item failure inside a
+batch is *not* a job failure — the job still succeeds and the failure appears in
+`result`.
+
+### `GET /v1/jobs`
+
+Recent jobs, newest first. `?status=` filters by state; `?limit=` (1–200,
+default 50) bounds the list.
+
+### `DELETE /v1/jobs/{job_id}`
+
+Cancels a queued or running job and returns its final state. Cancelling a job
+that has already finished is a no-op returning its existing state, so a retried
+cancel is safe.
+
+### Limits
+
+Jobs are held in memory by the process that accepted them. They are lost on
+restart, and behind a load balancer a client must poll the same instance it
+submitted to. Finished jobs expire after `WSA_JOB_RETENTION_SECONDS`, after
+which polling returns `404`.
+
 ## The summary object
 
 ```json

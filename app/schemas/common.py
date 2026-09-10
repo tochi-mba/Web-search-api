@@ -15,9 +15,14 @@ class ItemStatus(StrEnum):
 
 
 class StrictModel(BaseModel):
-    """Base model that rejects unknown fields, so typos surface loudly."""
+    """Base model that rejects unknown fields, so typos surface loudly.
 
-    model_config = ConfigDict(extra="forbid")
+    ``populate_by_name`` lets a field be supplied under either its own name or
+    its alias, which is how ``background`` also accepts ``async`` - a word
+    Python will not allow as an identifier.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class ErrorPayload(StrictModel):

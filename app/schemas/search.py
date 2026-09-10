@@ -55,6 +55,15 @@ class SearchRequest(StrictModel):
         description="Guidance applied to every query in this batch.",
     )
 
+    background: bool = Field(
+        default=False,
+        alias="async",
+        description=(
+            "Run in the background: returns 202 with a job id to poll instead "
+            "of holding the connection open. Also accepted as 'async'."
+        ),
+    )
+
     language: str = Field(default="en", max_length=8)
     region: str = Field(default="us", max_length=8)
     safe_search: bool = True

@@ -73,6 +73,15 @@ class Settings(BaseSettings):
     max_concurrency: int = Field(default=8, gt=0)
     max_concurrency_per_host: int = Field(default=2, gt=0)
 
+    # -- Background jobs --------------------------------------------------- #
+    max_background_jobs: int = Field(default=4, gt=0, description="Concurrent background jobs.")
+    job_retention_seconds: float = Field(
+        default=3600.0, ge=0, description="How long a finished job stays readable."
+    )
+    max_stored_jobs: int = Field(
+        default=1000, gt=0, description="Hard cap before the oldest finished jobs are evicted."
+    )
+
     # -- Search ----------------------------------------------------------- #
     search_backend: str = "google"
     searxng_base_url: str = ""

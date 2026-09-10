@@ -9,6 +9,8 @@ from app.api import deps
 from app.main import create_app
 from app.schemas.health import ReadinessComponent
 from app.services.fetch.page import FetchedPage
+from app.services.jobs.memory import InMemoryJobStore
+from app.services.jobs.runner import JobRunner
 from app.services.llm.summarizer import Summary
 from app.services.search.base import SearchQuery, SearchResponse, SearchResult
 from app.services.text.extractor import ExtractedContent
@@ -138,13 +140,20 @@ def fake_search():
 
 
 @pytest.fixture
-def app(fake_summarizer, fake_pages, fake_search):
+def job_runner():
+    """A real runner - jobs are the thing under test, so they are not faked."""
+    return JobRunner(InMemoryJobStore(retention_seconds=1000.0, max_jobs=100), max_concurrent=4)
+
+
+@pytest.fixture
+def app(fake_summarizer, fake_pages, fake_search, job_runner):
     """An app with every external dependency replaced by a fake."""
     application = create_app(make_settings())
     application.dependency_overrides[deps.get_summarizer] = lambda: fake_summarizer
     application.dependency_overrides[deps.get_page_fetcher] = lambda: fake_pages
     application.dependency_overrides[deps.get_search_router] = lambda: fake_search
     application.dependency_overrides[deps.get_max_concurrency] = lambda: 4
+    application.dependency_overrides[deps.get_job_runner] = lambda: job_runner
     application.dependency_overrides[deps.get_readiness_components] = lambda: [
         ReadinessComponent(name="browser", ready=True, detail="up"),
         ReadinessComponent(name="llm", ready=True, detail="1 model"),

@@ -91,6 +91,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.summarizer = services.summarizer
     app.state.page_fetcher = services.page_fetcher
     app.state.search_router = services.search_router
+    app.state.job_runner = services.job_runner
 
     # The browser starts lazily on first use, so readiness reflects whether a
     # browser could be launched at all rather than whether one is running.
@@ -131,13 +132,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(Exception, unhandled_error_handler)
 
-    from app.api.routes import health, models, scrape, search, summarize
+    from app.api.routes import health, jobs, models, scrape, search, summarize
 
     app.include_router(health.router)
     app.include_router(models.router)
     app.include_router(search.router)
     app.include_router(scrape.router)
     app.include_router(summarize.router)
+    app.include_router(jobs.router)
     return app
 
 

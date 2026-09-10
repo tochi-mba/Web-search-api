@@ -5,30 +5,46 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 
 from app.api import deps
-from app.api.mapping import to_summary_out
+from app.api.jobs_support import accepted_response
+from app.schemas.jobs import JobAccepted
 from app.schemas.scrape import SummarizeRequest, SummarizeResponse
+from app.services.jobs.runner import JobRunner
 from app.services.llm.summarizer import Summarizer
+from app.services.pipelines import run_summarize
 
 router = APIRouter(prefix="/v1", tags=["summarize"])
 
 
-@router.post("/summarize", response_model=SummarizeResponse, summary="Summarise text")
+@router.post(
+    "/summarize",
+    response_model=None,
+    summary="Summarise text",
+    responses={
+        200: {"model": SummarizeResponse, "description": "Completed synchronously."},
+        202: {"model": JobAccepted, "description": "Queued as a background job."},
+    },
+)
 async def summarize(
     request: SummarizeRequest,
     summarizer: Annotated[Summarizer, Depends(deps.get_summarizer)],
-) -> SummarizeResponse:
+    runner: Annotated[JobRunner, Depends(deps.get_job_runner)],
+) -> SummarizeResponse | JSONResponse:
     """Summarise text the caller already has.
 
     Exists so an MCP server or another service can reuse the summarisation
     pipeline without going through scraping.
+
+    With ``background`` (or ``async``) set, returns 202 with a job id to poll.
     """
-    summary = await summarizer.summarize(
-        request.text,
-        model_id=request.model,
-        topic=request.topic,
-        additional_notes=request.additional_notes,
-        sources=list(request.sources) or None,
-    )
-    return SummarizeResponse(summary=to_summary_out(summary))
+
+    async def work() -> dict[str, object]:
+        response = await run_summarize(request, summarizer=summarizer)
+        return response.model_dump(mode="json")
+
+    if request.background:
+        return accepted_response(await runner.submit("summarize", work))
+
+    return await run_summarize(request, summarizer=summarizer)

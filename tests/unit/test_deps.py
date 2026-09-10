@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.api.deps import (
+    get_job_runner,
     get_max_concurrency,
     get_page_fetcher,
     get_readiness_components,
@@ -55,6 +56,7 @@ def test_max_concurrency_comes_from_settings():
         (get_summarizer, "summariser"),
         (get_page_fetcher, "page fetcher"),
         (get_search_router, "search router"),
+        (get_job_runner, "job runner"),
     ],
 )
 def test_missing_components_raise_a_clean_service_error(provider, label):
@@ -85,6 +87,14 @@ def test_page_fetcher_is_returned_when_present():
 
     fetcher = PageFetcher(object())  # type: ignore[arg-type]
     assert get_page_fetcher(make_request(page_fetcher=fetcher)) is fetcher
+
+
+def test_job_runner_is_returned_when_present():
+    from app.services.jobs.memory import InMemoryJobStore
+    from app.services.jobs.runner import JobRunner
+
+    runner = JobRunner(InMemoryJobStore())
+    assert get_job_runner(make_request(job_runner=runner)) is runner
 
 
 def test_search_router_is_returned_when_present():

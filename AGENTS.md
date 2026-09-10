@@ -39,6 +39,8 @@ app/
     search/       backend protocol, Google, SearxNG, Serper, failover router
     llm/          base protocol, specs table, capabilities, providers, registry,
                   prompts, summarizer
+    jobs/         job types, in-memory store, background runner
+    pipelines.py  the work behind each endpoint, shared by sync and background
   api/            deps (DI), mapping, routes
 tests/
   unit/           one module per source module
@@ -63,6 +65,9 @@ tests/
   `app.dependency_overrides`; never monkeypatch internals from an endpoint test.
 - **Batch endpoints never fail as a whole.** One bad item gets `status: "error"`
   and an error object; the response stays `200`.
+- **Endpoint work lives in `app/services/pipelines.py`, not in the route.** Routes
+  translate and delegate. Synchronous requests and background jobs call the *same*
+  function — never fork the logic, or the two paths will drift.
 
 ## How to extend
 
@@ -125,3 +130,10 @@ When Google changes its markup, update the fixture and the parser together.
   `/opt/pw-browsers/chromium`. Never run `playwright install` here.
 - **An empty string disables a provider**; `None` means "not specified, use the
   default". This applies to both `api_key` and `base_url`.
+- **`asyncio.create_task` results must be referenced.** A task held only by the
+  event loop can be garbage-collected mid-flight. `JobRunner` keeps its own
+  reference in `self._tasks` and discards it in a done-callback; there is a test
+  that forces a collection to prove it.
+- **Background jobs are in-process.** They are lost on restart and are not shared
+  between replicas. Swap `JobStore` for a shared implementation if that matters —
+  the seam exists for exactly that.

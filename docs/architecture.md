@@ -79,6 +79,23 @@ and `original_chars` appear on every summary.
 A single dead link in a batch of twenty should cost the caller that one link,
 not the other nineteen. Each item carries its own status; the response is 200.
 
+### Background jobs run the same code as synchronous requests
+
+Each endpoint's work lives in `app/services/pipelines.py` as a plain function.
+The route either awaits it or hands it to the `JobRunner`. Two implementations
+of the same operation would drift, and only one would end up properly tested;
+an integration test asserts both paths produce identical output.
+
+`JobStore` is a protocol with an in-memory implementation. That keeps the
+service dependency-free, at the cost of jobs being confined to the process that
+accepted them — lost on restart, invisible to other replicas. A shared
+implementation slots in behind the protocol without touching the runner or the
+routes.
+
+Background work is bounded by its own semaphore, separate from the request
+concurrency limit, so a queue of jobs cannot starve synchronous callers or
+exhaust the shared browser.
+
 ## Request lifecycle resources
 
 One `httpx.AsyncClient` and one browser process are shared across all requests

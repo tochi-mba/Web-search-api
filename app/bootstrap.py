@@ -15,6 +15,8 @@ from app.core.logging import get_logger
 from app.services.fetch.browser import BrowserSession, PlaywrightBrowserSession
 from app.services.fetch.http import HttpFetcher
 from app.services.fetch.page import PageFetcher
+from app.services.jobs.memory import InMemoryJobStore
+from app.services.jobs.runner import JobRunner
 from app.services.llm.base import LLMProvider
 from app.services.llm.providers.anthropic import AnthropicProvider
 from app.services.llm.providers.ollama import OllamaProvider
@@ -42,10 +44,14 @@ class Services:
     summarizer: Summarizer
     page_fetcher: PageFetcher
     search_router: SearchRouter
+    job_runner: JobRunner
     anthropic: AnthropicProvider
 
     async def aclose(self) -> None:
         """Release every resource, best effort."""
+        # Jobs first: cancelling them while their collaborators still exist
+        # leaves no task reaching for a closed client on the way out.
+        await self.job_runner.aclose()
         await self.browser.close()
         await self.anthropic.aclose()
         await self.http_client.aclose()
@@ -158,6 +164,14 @@ def build_services(settings: Settings) -> Services:
         preferred=settings.search_backend,
     )
 
+    job_runner = JobRunner(
+        InMemoryJobStore(
+            retention_seconds=settings.job_retention_seconds,
+            max_jobs=settings.max_stored_jobs,
+        ),
+        max_concurrent=settings.max_background_jobs,
+    )
+
     logger.info(
         "services.built",
         providers=len(providers),
@@ -172,5 +186,6 @@ def build_services(settings: Settings) -> Services:
         summarizer=summarizer,
         page_fetcher=page_fetcher,
         search_router=search_router,
+        job_runner=job_runner,
         anthropic=anthropic,
     )

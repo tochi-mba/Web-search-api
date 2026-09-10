@@ -37,6 +37,15 @@ class ScrapeRequest(StrictModel):
         description="Produce one summary across all URLs instead of one per URL.",
     )
 
+    background: bool = Field(
+        default=False,
+        alias="async",
+        description=(
+            "Run in the background: returns 202 with a job id to poll instead "
+            "of holding the connection open. Also accepted as 'async'."
+        ),
+    )
+
 
 class ExtractedPage(StrictModel):
     """Readable content recovered from one page."""
@@ -78,6 +87,15 @@ class SummarizeRequest(StrictModel):
     additional_notes: str | None = Field(default=None, max_length=constants.MAX_NOTES_CHARS)
     topic: str | None = Field(default=None, max_length=500)
     sources: list[str] = Field(default_factory=list, max_length=50)
+
+    background: bool = Field(
+        default=False,
+        alias="async",
+        description=(
+            "Run in the background: returns 202 with a job id to poll instead "
+            "of holding the connection open. Also accepted as 'async'."
+        ),
+    )
 
 
 class SummarizeResponse(StrictModel):

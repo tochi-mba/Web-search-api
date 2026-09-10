@@ -18,6 +18,7 @@ from app.schemas.health import ReadinessComponent
 
 if TYPE_CHECKING:
     from app.services.fetch.page import PageFetcher
+    from app.services.jobs.runner import JobRunner
     from app.services.llm.registry import ModelRegistry
     from app.services.llm.summarizer import Summarizer
     from app.services.search.router import SearchRouter
@@ -73,6 +74,15 @@ def get_search_router(request: Request) -> SearchRouter:
     search_router = _require(request, "search_router", "search router")
     assert isinstance(search_router, SearchRouter)  # noqa: S101 - built in the lifespan
     return search_router
+
+
+def get_job_runner(request: Request) -> JobRunner:
+    """Provide the background job runner."""
+    from app.services.jobs.runner import JobRunner
+
+    runner = _require(request, "job_runner", "job runner")
+    assert isinstance(runner, JobRunner)  # noqa: S101 - built in the lifespan
+    return runner
 
 
 def get_max_concurrency(request: Request) -> int:

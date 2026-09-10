@@ -25,6 +25,7 @@ make run                          # http://localhost:8000/docs
 | `POST /v1/search` | Batch Google queries → results (+ optional deep fetch) + summary. |
 | `POST /v1/scrape` | Batch URLs → clean extracted text + summary. |
 | `POST /v1/summarize` | Text in, summary out. A direct hook for an MCP server. |
+| `GET /v1/jobs`, `GET|DELETE /v1/jobs/{id}` | Poll, list and cancel background jobs. |
 
 Interactive docs at `/docs`, OpenAPI schema at `/openapi.json`.
 
@@ -63,6 +64,38 @@ curl -s -X POST localhost:8000/v1/scrape \
 
 `render_js` is `auto` (plain HTTP, escalating to a headless browser when the
 result looks like a client-rendered shell), `always`, or `never`.
+
+### Background mode
+
+A twenty-URL scrape with summarisation takes minutes. Rather than hold the
+connection open, pass `async` (or `background`) and get an immediate `202` with
+a job id to poll:
+
+```bash
+curl -sD- -X POST localhost:8000/v1/scrape \
+  -H 'content-type: application/json' \
+  -d '{"urls": ["https://example.com"], "async": true}'
+# HTTP/1.1 202 Accepted
+# Location: /v1/jobs/f8c0340681104c648c7e9e860d8b4af6
+# Retry-After: 2
+
+curl -s localhost:8000/v1/jobs/f8c0340681104c648c7e9e860d8b4af6
+# {"status": "running",   "result": null, ...}
+# {"status": "succeeded", "result": {"results": [...]}, ...}
+```
+
+Works on `/v1/search`, `/v1/scrape` and `/v1/summarize`. `GET /v1/jobs` lists
+recent jobs, `DELETE /v1/jobs/{id}` cancels one that is still running.
+
+**The `result` is exactly what the synchronous call would have returned** — the
+two modes run the same code, and a test asserts the outputs are identical. So
+switching a client to background mode never means reshaping how it reads the
+answer.
+
+> **Jobs live in the process that accepted them.** They are lost on restart and
+> are not visible to other replicas, so behind a load balancer a client must
+> poll the instance it submitted to. `JobStore` is the seam where a shared
+> backend (Redis, a database) drops in; nothing above it would change.
 
 ### Batch semantics
 
@@ -207,6 +240,8 @@ Every value is optional — see `.env.example` for the full list.
 | `WSA_SEARCH_BACKEND` | `google` | Preferred backend. |
 | `WSA_API_KEYS` | *(empty)* | Comma-separated. Empty means unauthenticated. |
 | `WSA_MAX_CONCURRENCY` | `8` | Global in-flight limit for batch work. |
+| `WSA_MAX_BACKGROUND_JOBS` | `4` | Concurrent background jobs. |
+| `WSA_JOB_RETENTION_SECONDS` | `3600` | How long a finished job stays readable. |
 
 Provider credentials use each vendor's conventional variable —
 `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY`, and so on. Any provider
