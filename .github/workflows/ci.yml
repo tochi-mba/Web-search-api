@@ -29,6 +29,9 @@ jobs:
       - name: Install Chromium for browser tests
         run: uv run playwright install --with-deps chromium
 
+      - name: Show resolved browser
+        run: uv run python -c "from app.services.fetch.browser import resolve_executable_path as r; print(r() or 'playwright bundled')"
+
       - name: Lint
         run: |
           uv run ruff format --check app tests scripts
