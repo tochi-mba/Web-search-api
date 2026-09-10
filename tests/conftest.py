@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -28,3 +29,19 @@ def settings() -> Settings:
         respect_robots=True,
         request_timeout_seconds=5.0,
     )
+
+
+@pytest.fixture(scope="session")
+def fixtures_dir() -> Path:
+    """Directory holding saved HTML fixtures."""
+    return Path(__file__).parent / "fixtures" / "html"
+
+
+@pytest.fixture(scope="session")
+def load_html(fixtures_dir: Path):
+    """Return a loader for a named HTML fixture."""
+
+    def _load(name: str) -> str:
+        return (fixtures_dir / name).read_text(encoding="utf-8")
+
+    return _load
