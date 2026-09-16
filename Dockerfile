@@ -15,6 +15,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Dependency layer first so application edits do not invalidate it.
 COPY pyproject.toml README.md ./
+# git: uv fetches the family's client packages from tagged git sources.
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN uv sync --no-dev --no-install-project
 
 COPY app ./app
