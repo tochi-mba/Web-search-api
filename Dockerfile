@@ -7,7 +7,11 @@ FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    # The base image's Python is older than this service needs, so uv downloads one. Put it
+    # somewhere pwuser can read: the default is /root/.local, which is closed to everyone else.
+    UV_PYTHON_INSTALL_DIR=/opt/uv/python \
+    UV_PYTHON=3.11
 
 WORKDIR /app
 
@@ -22,7 +26,9 @@ RUN uv sync --no-dev --no-install-project
 COPY app ./app
 RUN uv sync --no-dev
 
-# Run as the unprivileged user the base image provides.
+# Run as the unprivileged user the base image provides. The venv was built as root, so
+# hand /app over first: uv run has to resolve /app/.venv/bin/python as that user.
+RUN chown -R pwuser:pwuser /app
 USER pwuser
 
 EXPOSE 8006
