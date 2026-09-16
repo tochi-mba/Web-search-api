@@ -35,8 +35,9 @@ check: lint type imports test ## Everything CI runs
 run: ## Serve the API on :8006 with reload
 	$(UV) run uvicorn app.main:app --reload --port 8006
 
+# Signed-in gh fetches private client packages; with no session git fetches anonymously.
 docker: ## Build the container image
-	docker build -t web-search-api:local .
+	@GITHUB_TOKEN="$$(gh auth token 2>/dev/null)" docker build --secret id=github_token,env=GITHUB_TOKEN -t web-search-api:local .
 
 clean: ## Remove caches and build output
 	rm -rf .pytest_cache .mypy_cache .ruff_cache .hypothesis htmlcov .coverage coverage.xml build dist
