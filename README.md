@@ -10,7 +10,7 @@ API only. No UI. Designed to sit behind an MCP server.
 ```bash
 make install                      # uv sync --all-extras
 cp .env.example .env              # point it at your keyring
-make run                          # http://localhost:8000/docs
+make run                          # http://localhost:8006/docs
 ```
 
 **Provider keys do not live here.** Every third-party credential is stored in
@@ -26,7 +26,7 @@ work without keyring at all.
 | Endpoint | Purpose |
 |---|---|
 | `GET /health` (alias `/healthy`) | Liveness. Does no I/O. |
-| `GET /health/ready` | Readiness: browser plus at least one reachable LLM provider. |
+| `GET /ready` (also `/health/ready`) | Readiness: 200 when ready, 503 when dependencies are degraded. |
 | `GET /v1/models` | Models reachable **right now**, with per-model capabilities. |
 | `POST /v1/search` | Batch Google queries → results (+ optional deep fetch) + summary. |
 | `POST /v1/scrape` | Batch URLs → clean extracted text + summary. |
@@ -38,7 +38,7 @@ Interactive docs at `/docs`, OpenAPI schema at `/openapi.json`.
 ### Search
 
 ```bash
-curl -s -X POST localhost:8000/v1/search \
+curl -s -X POST localhost:8006/v1/search \
   -H 'content-type: application/json' -d '{
     "queries": [
       {"query": "widget latency causes", "max_results": 10},
@@ -59,7 +59,7 @@ pages and summarises their full text.
 ### Scrape
 
 ```bash
-curl -s -X POST localhost:8000/v1/scrape \
+curl -s -X POST localhost:8006/v1/scrape \
   -H 'content-type: application/json' -d '{
     "urls": ["https://example.com/article"],
     "render_js": "auto",
@@ -78,14 +78,14 @@ connection open, pass `async` (or `background`) and get an immediate `202` with
 a job id to poll:
 
 ```bash
-curl -sD- -X POST localhost:8000/v1/scrape \
+curl -sD- -X POST localhost:8006/v1/scrape \
   -H 'content-type: application/json' \
   -d '{"urls": ["https://example.com"], "async": true}'
 # HTTP/1.1 202 Accepted
 # Location: /v1/jobs/f8c0340681104c648c7e9e860d8b4af6
 # Retry-After: 2
 
-curl -s localhost:8000/v1/jobs/f8c0340681104c648c7e9e860d8b4af6
+curl -s localhost:8006/v1/jobs/f8c0340681104c648c7e9e860d8b4af6
 # {"status": "running",   "result": null, ...}
 # {"status": "succeeded", "result": {"results": [...]}, ...}
 ```
@@ -208,7 +208,7 @@ configured backend rather than returning silent nonsense.
 |---|---|---|
 | `google` (default) | Chromium | Free, and the one that gets blocked. |
 | `searxng` | `WSA_SEARXNG_BASE_URL` | Self-hostable metasearch. The recommended failover. |
-| `serper` | `WSA_SERPER_API_KEY` | Paid SERP API. Most reliable. |
+| `serper` | a `serper` credential in keyring | Paid SERP API. Most reliable. Per caller, like every other credential. |
 
 Set the preferred backend with `WSA_SEARCH_BACKEND`. Zero results from the last
 backend is returned as a genuine empty answer, not an error.
@@ -255,6 +255,13 @@ Every value is optional — see `.env.example` for the full list.
 | `WSA_MAX_CONCURRENCY` | `8` | Global in-flight limit for batch work. |
 | `WSA_MAX_BACKGROUND_JOBS` | `4` | Concurrent background jobs. |
 | `WSA_JOB_RETENTION_SECONDS` | `3600` | How long a finished job stays readable. |
+| `WSA_SETTINGS_API_BASE_URL` | *(empty)* | Where settings-api is. Unset, everybody shares the knobs above. |
+| `WSA_SETTINGS_API_TOKEN` | *(empty)* | This service's token at settings-api. Must be set with the URL. |
+
+When settings-api is configured, each caller can lower `max_content_chars`,
+choose a default model and search backend, disable extra providers, pick a
+default keyring profile, and choose how long their finished jobs stay
+readable. See [docs/architecture.md](docs/architecture.md#per-person-settings-ship-dark).
 
 Provider credentials are **not** environment variables. They live in keyring,
 under the provider's key as the service name (`anthropic`, `groq`, …), and are
@@ -266,7 +273,7 @@ provisioned with `scripts/provision_keyring.py`. See
 ## Development
 
 ```bash
-make check     # ruff format --check, ruff check, mypy --strict, pytest @ 100%
+make check     # ruff, mypy, import-linter, pytest @ 100% branch coverage
 make test      # tests only
 make fmt       # auto-format
 make run       # dev server with reload
@@ -282,9 +289,11 @@ Further reading:
 - [`docs/keyring.md`](docs/keyring.md) — where credentials live and how to set them up
 - [`AGENTS.md`](AGENTS.md) — conventions and how to extend the codebase
 - [`docs/architecture.md`](docs/architecture.md) — how a request flows through
+- [`docs/operations.md`](docs/operations.md) — every setting, deploying, and what each failure means
 - [`docs/providers.md`](docs/providers.md) — adding a provider (one table row)
 - [`docs/security.md`](docs/security.md) — the SSRF threat model
 - [`docs/testing.md`](docs/testing.md) — testing strategy
+- [`docs/adr/`](docs/adr/README.md) — the decisions behind all of it, and what would change them
 
 ## Licence
 

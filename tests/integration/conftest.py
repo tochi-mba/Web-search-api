@@ -11,6 +11,7 @@ from app.schemas.health import ReadinessComponent
 from app.services.fetch.page import FetchedPage
 from app.services.jobs.memory import InMemoryJobStore
 from app.services.jobs.runner import JobRunner
+from app.services.keyring.caller import Caller
 from app.services.llm.registry import ModelRegistry
 from app.services.llm.summarizer import Summary
 from app.services.search.base import SearchQuery, SearchResponse, SearchResult
@@ -35,6 +36,7 @@ class FakeSummarizer:
         sources=None,
         caller=None,
         auth=None,
+        preferences=None,
     ):
         self.calls.append(
             {
@@ -124,7 +126,9 @@ class FakeSearchRouter:
             ],
         )
 
-    async def search(self, query: SearchQuery) -> SearchResponse:
+    async def search(
+        self, query: SearchQuery, *, caller: Caller | None = None, preferred: str | None = None
+    ) -> SearchResponse:
         self.queries.append(query)
         if query.query in self.errors:
             raise self.errors[query.query]

@@ -214,6 +214,21 @@ def test_no_auth_is_empty():
     assert NO_AUTH.is_expired() is False
 
 
+def test_resolved_credentials_never_render_their_values():
+    auth = ResolvedAuth(
+        headers={"Authorization": "secret-header"}, query_params={"key": "secret-query"}
+    )
+    assert "secret-header" not in repr(auth)
+    assert "secret-query" not in str(auth)
+
+
+def test_caller_never_renders_its_bearer_token():
+    from app.services.keyring.caller import Caller
+
+    caller = Caller(account_id="alice", profile="personal", user_token="secret-bearer")
+    assert "secret-bearer" not in repr(caller)
+
+
 def test_expiry_comparison():
     past = ResolvedAuth(expires_at=datetime(2000, 1, 1, tzinfo=UTC))
     future = ResolvedAuth(expires_at=datetime(2100, 1, 1, tzinfo=UTC))

@@ -13,6 +13,7 @@ from app.api.deps import (
     get_job_runner,
     get_max_concurrency,
     get_page_fetcher,
+    get_preference_source,
     get_readiness_components,
     get_registry,
     get_search_router,
@@ -33,8 +34,26 @@ class FakeRegistry:
     def __init__(self, catalog):
         self._catalog = catalog
 
-    async def catalog(self):
+    async def catalog(self, caller=None, *, refresh=False, disabled_providers=()):
         return self._catalog
+
+
+class UnreachableSettings:
+    """A preference source standing in for settings-api being down.
+
+    Satisfies the real protocol, so a change to it fails here rather than passing quietly.
+    """
+
+    async def for_token(self, user_token=None, /):
+        return self
+
+    async def aclose(self):
+        return None
+
+    def require_disabled_providers(self):
+        from app.core.errors import PreferencesUnavailableError
+
+        raise PreferencesUnavailableError("the disabled-provider list is unknown")
 
 
 def test_get_settings_dep_returns_settings():
@@ -97,6 +116,23 @@ def test_job_runner_is_returned_when_present():
     assert get_job_runner(make_request(job_runner=runner)) is runner
 
 
+def test_preference_source_is_returned_when_present():
+    from app.services.preferences import DeploymentPreferences
+
+    source = DeploymentPreferences(make_settings())
+    assert (
+        get_preference_source(make_request(preferences=source, settings=make_settings())) is source
+    )
+
+
+def test_preference_source_falls_back_to_the_configuration():
+    from app.services.preferences import DeploymentPreferences
+
+    settings = make_settings()
+    source = get_preference_source(make_request(settings=settings))
+    assert isinstance(source, DeploymentPreferences)
+
+
 def test_search_router_is_returned_when_present():
     from app.services.search.router import SearchRouter
 
@@ -131,17 +167,86 @@ async def test_registry_with_models_is_ready():
         ],
     )
     components = await get_readiness_components(
-        make_request(browser_available=True, model_registry=FakeRegistry(catalog))
+        make_request(
+            browser_available=True,
+            model_registry=FakeRegistry(catalog),
+            settings=make_settings(),
+        )
     )
     llm = next(c for c in components if c.name == "llm")
     assert llm.ready is True
-    assert llm.detail == "3 models across 1 providers"
+    assert llm.detail == (
+        "2 providers configured, 1 reachable without a credential, 3 models listed anonymously"
+    )
 
 
-async def test_registry_without_models_is_not_ready():
+async def test_a_registry_with_no_provider_configured_is_not_ready():
     components = await get_readiness_components(
-        make_request(browser_available=True, model_registry=FakeRegistry(ModelCatalog()))
+        make_request(
+            browser_available=True,
+            model_registry=FakeRegistry(ModelCatalog()),
+            settings=make_settings(),
+        )
     )
     llm = next(c for c in components if c.name == "llm")
     assert llm.ready is False
-    assert llm.detail == "no reachable LLM provider"
+    assert llm.detail == "no provider configured"
+
+
+async def test_a_provider_that_needs_a_credential_still_makes_it_ready():
+    # The probe carries no credential, so a cloud provider answers "unauthorized". That is
+    # not this service being unready: every caller who brings a token is served. Requiring a
+    # model here reported a healthy cloud-only deployment as permanently unready.
+    catalog = ModelCatalog(
+        models=[],
+        providers=[ProviderHealth(name="anthropic", status=ProviderStatus.UNAUTHORIZED)],
+    )
+
+    components = await get_readiness_components(
+        make_request(
+            browser_available=True,
+            model_registry=FakeRegistry(catalog),
+            settings=make_settings(),
+        )
+    )
+
+    llm = next(c for c in components if c.name == "llm")
+    assert llm.ready is True
+    assert "1 providers configured" in llm.detail
+
+
+async def test_a_provider_that_is_not_configured_does_not_count():
+    catalog = ModelCatalog(
+        models=[],
+        providers=[ProviderHealth(name="ollama", status=ProviderStatus.NOT_CONFIGURED)],
+    )
+
+    components = await get_readiness_components(
+        make_request(
+            browser_available=True,
+            model_registry=FakeRegistry(catalog),
+            settings=make_settings(),
+        )
+    )
+
+    assert next(c for c in components if c.name == "llm").ready is False
+
+
+async def test_settings_api_being_unreachable_does_not_fail_the_probe():
+    # Readiness is a fact about this process. A probe that raised because settings-api was
+    # down would take this service out of rotation for somebody else's outage.
+    catalog = ModelCatalog(
+        models=[],
+        providers=[ProviderHealth(name="anthropic", status=ProviderStatus.AVAILABLE)],
+    )
+
+    components = await get_readiness_components(
+        make_request(
+            browser_available=True,
+            model_registry=FakeRegistry(catalog),
+            settings=make_settings(),
+            preferences=UnreachableSettings(),
+        )
+    )
+
+    assert next(c for c in components if c.name == "llm").ready is True

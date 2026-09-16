@@ -85,7 +85,7 @@ def test_normalise_adds_a_root_path():
         "192.168.1.1",
         "172.16.0.1",
         "169.254.169.254",
-        "0.0.0.0",  # noqa: S104 - the point is that we block it
+        "0.0.0.0",  # the point is that we block it
         "::1",
         "fe80::1",
         "fc00::1",
@@ -100,6 +100,12 @@ def test_private_and_reserved_addresses_are_blocked(ip):
 @pytest.mark.parametrize("ip", ["93.184.216.34", "8.8.8.8", "2606:2800:220:1:248:1893:25c8:1946"])
 def test_public_addresses_are_allowed(ip):
     assert_public_ip(ip, host="example.com")
+
+
+def test_an_address_that_is_not_an_ip_is_rejected():
+    """The resolver is injected, so what it returns is not guaranteed to parse."""
+    with pytest.raises(ForbiddenUrlError, match="Unresolvable address"):
+        assert_public_ip("not-an-address", host="broken.test")
 
 
 def test_hostname_resolving_to_a_private_address_is_blocked():

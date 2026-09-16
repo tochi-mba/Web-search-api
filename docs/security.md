@@ -49,7 +49,6 @@ then**, because there is no legitimate reason for this service to read them.
 | Request timeout | `WSA_REQUEST_TIMEOUT_SECONDS` (20s) |
 | Content-type allowlist | text, xhtml, xml, json only |
 | Global concurrency | `WSA_MAX_CONCURRENCY` (8) |
-| Per-host concurrency | `WSA_MAX_CONCURRENCY_PER_HOST` (2) |
 | robots.txt | `WSA_RESPECT_ROBOTS` (true) |
 
 ## Prompt injection

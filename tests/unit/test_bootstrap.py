@@ -24,13 +24,14 @@ async def test_every_known_provider_is_constructed(client):
     assert len(providers) > 40
 
 
-async def test_providers_can_be_disabled(client):
+async def test_disabled_providers_are_still_constructed(client):
+    """Per-caller filtering cannot happen if the provider was never built."""
     settings = make_settings(disabled_providers=("anthropic", "ollama", "groq"))
     providers = build_llm_providers(settings, client)
     names = {p.name for p in providers}
-    assert "anthropic" not in names
-    assert "ollama" not in names
-    assert "groq" not in names
+    assert "anthropic" in names
+    assert "ollama" in names
+    assert "groq" in names
     assert "openai" in names
 
 
@@ -86,3 +87,63 @@ async def test_settings_flow_into_the_registry():
         assert services.registry._cache_ttl == 42.0
     finally:
         await services.aclose()
+
+
+async def test_no_verifier_is_built_without_keyring():
+    """A token presented to a deployment with no keyring is refused as unconfigured."""
+    services = build_services(make_settings())
+    try:
+        assert services.token_verifier is None
+    finally:
+        await services.aclose()
+
+
+async def test_a_configured_verifier_is_released_with_everything_else():
+    services = build_services(
+        make_settings(
+            keyring_base_url="http://127.0.0.1:8001",
+            keyring_service_token="svc-token-0123456789abcdef0123456789",
+        )
+    )
+    assert services.token_verifier is not None
+    await services.aclose()
+    assert services.token_verifier._jwks._client.is_closed
+
+
+async def test_without_settings_api_everybody_gets_the_configuration():
+    from app.services.preferences import DeploymentPreferences
+
+    services = build_services(make_settings())
+    try:
+        assert isinstance(services.preferences, DeploymentPreferences)
+    finally:
+        await services.aclose()
+
+
+async def test_a_settings_client_is_not_asked_at_startup_and_is_closed():
+    from app.services.preferences import SettingsApiPreferences, build_preference_source
+
+    class RecordingClient:
+        def __init__(self) -> None:
+            self.closed = False
+            self.resolves = 0
+
+        async def resolve(self, namespace: str, *, user_token: str):
+            self.resolves += 1
+            raise AssertionError("must not fetch settings at startup")
+
+        async def set(self, namespace: str, key: str, value: object, *, user_token: str) -> int:
+            raise AssertionError("must not write settings at startup")
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    client = RecordingClient()
+    source = build_preference_source(make_settings(), client=client)
+    services = build_services(make_settings(), preferences=source)
+    try:
+        assert isinstance(services.preferences, SettingsApiPreferences)
+        assert client.resolves == 0
+    finally:
+        await services.aclose()
+    assert client.closed

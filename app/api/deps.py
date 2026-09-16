@@ -8,21 +8,24 @@ Long-lived objects are built once during application startup and read from
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
-from fastapi import Request
+from fastapi import Depends, Request
 
 from app.config import Settings, get_settings
-from app.core.errors import NotFoundError, ProviderUnavailableError
+from app.core.errors import AuthError, NotFoundError, ProviderUnavailableError
+from app.core.logging import get_logger
 from app.schemas.health import ReadinessComponent
+from app.services.keyring.caller import Caller
+from app.services.preferences import Preferences
 
 if TYPE_CHECKING:
     from app.services.fetch.page import PageFetcher
     from app.services.jobs.runner import JobRunner
-    from app.services.keyring.caller import Caller
     from app.services.keyring.client import ResolvedAuth
     from app.services.llm.registry import ModelRegistry
     from app.services.llm.summarizer import Summarizer
+    from app.services.preferences import PreferenceSource
     from app.services.search.router import SearchRouter
 
 
@@ -87,6 +90,20 @@ def get_job_runner(request: Request) -> JobRunner:
     return runner
 
 
+def get_preference_source(request: Request) -> PreferenceSource:
+    """Provide the per-person settings source."""
+    from app.services.preferences import DeploymentPreferences, PreferenceSource
+
+    source = getattr(request.app.state, "preferences", None)
+    if source is None:
+        # Tests that never start the lifespan still have settings on the app.
+        settings: Settings = request.app.state.settings
+        source = DeploymentPreferences(settings)
+        request.app.state.preferences = source
+    assert isinstance(source, PreferenceSource)  # noqa: S101 - built in the lifespan
+    return source
+
+
 #: Where the end user's keyring token travels, matching keyring's own header.
 USER_TOKEN_HEADER = "X-Keyring-User-Token"  # noqa: S105 - a header name
 
@@ -102,9 +119,17 @@ async def get_caller(request: Request) -> Caller | None:
     request actually needs a secret. Rejecting every anonymous request here
     would break local-only deployments that never touch keyring.
     """
-    from app.services.keyring.caller import Caller
+    from app.services.keyring.tokens import BAD_TOKEN
 
     token = request.headers.get(USER_TOKEN_HEADER)
+    authorization = request.headers.get("Authorization")
+    if authorization is not None:
+        scheme, _, bearer = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not bearer or (token and token != bearer):
+            raise AuthError(BAD_TOKEN)
+        token = bearer
+    elif token:
+        get_logger(__name__).info("legacy_user_token_header", replacement="Authorization: Bearer")
     if not token:
         return None
 
@@ -118,14 +143,35 @@ async def get_caller(request: Request) -> Caller | None:
             ),
         )
 
-    settings: Settings = request.app.state.settings
     account_id = await verifier.verify(token)
-    profile = request.headers.get(PROFILE_HEADER) or settings.keyring_default_profile
+    source = get_preference_source(request)
+    preferences = await source.for_token(token)
+    request.state.preferences_resolved = preferences
+    requested_profile = request.headers.get(PROFILE_HEADER)
+    profile = requested_profile if requested_profile else preferences.default_profile
     return Caller(account_id=account_id, profile=profile, user_token=token)
 
 
+async def get_preferences(
+    request: Request,
+    caller: Annotated[Caller | None, Depends(get_caller)],
+) -> Preferences:
+    """The preferences of whoever this request is for, or the configuration."""
+    cached = getattr(request.state, "preferences_resolved", None)
+    if isinstance(cached, Preferences):
+        return cached
+    source = get_preference_source(request)
+    token = caller.user_token if caller is not None else None
+    preferences = await source.for_token(token)
+    request.state.preferences_resolved = preferences
+    return preferences
+
+
 async def resolve_job_auth(
-    registry: ModelRegistry, model_id: str | None, caller: Caller | None
+    registry: ModelRegistry,
+    model_id: str | None,
+    caller: Caller | None,
+    preferences: Preferences,
 ) -> ResolvedAuth | None:
     """Resolve a background job's credential up front.
 
@@ -141,7 +187,12 @@ async def resolve_job_auth(
 
     if caller is None:
         return None
-    model = await registry.resolve(model_id, caller)
+    model = await registry.resolve(
+        model_id,
+        caller,
+        disabled_providers=preferences.require_disabled_providers(),
+        default_model=preferences.default_model,
+    )
     provider = registry.provider_for(model)
     try:
         return await registry.credential_for(provider, caller)
@@ -181,17 +232,38 @@ async def get_readiness_components(request: Request) -> list[ReadinessComponent]
         )
         return checks
 
-    catalog = await registry.catalog()
-    ready = bool(catalog.models)
-    available = sum(1 for p in catalog.providers if p.is_available)
+    from app.core.errors import PreferencesUnavailableError
+    from app.services.llm.base import ProviderStatus
+
+    # This probe acts for nobody, so it carries no credential and applies no person's
+    # disabled list. settings-api being unreachable must not make it raise: readiness is a
+    # fact about this process, and a probe that failed would report the wrong service down.
+    try:
+        preferences = await get_preference_source(request).for_token(None)
+        disabled: frozenset[str] = preferences.require_disabled_providers()
+    except PreferencesUnavailableError:
+        disabled = frozenset()
+
+    catalog = await registry.catalog(disabled_providers=disabled)
+    configured = [
+        provider
+        for provider in catalog.providers
+        if provider.status is not ProviderStatus.NOT_CONFIGURED
+    ]
+    available = sum(1 for provider in catalog.providers if provider.is_available)
+    # Ready means this service can serve a caller who brings a credential -- not that an
+    # anonymous probe reached a model. Most providers need a per-caller credential from
+    # keyring, so requiring a model here reported a healthy, cloud-only deployment as
+    # permanently unready while every real caller was being served.
     checks.append(
         ReadinessComponent(
             name="llm",
-            ready=ready,
+            ready=bool(configured),
             detail=(
-                f"{len(catalog.models)} models across {available} providers"
-                if ready
-                else "no reachable LLM provider"
+                f"{len(configured)} providers configured, {available} reachable without a "
+                f"credential, {len(catalog.models)} models listed anonymously"
+                if configured
+                else "no provider configured"
             ),
         )
     )

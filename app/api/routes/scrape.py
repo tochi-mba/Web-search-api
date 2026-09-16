@@ -17,6 +17,7 @@ from app.services.keyring.caller import Caller
 from app.services.llm.registry import ModelRegistry
 from app.services.llm.summarizer import Summarizer
 from app.services.pipelines import run_scrape
+from app.services.preferences import Preferences
 
 router = APIRouter(prefix="/v1", tags=["scrape"])
 
@@ -38,6 +39,7 @@ async def scrape(
     runner: Annotated[JobRunner, Depends(deps.get_job_runner)],
     registry: Annotated[ModelRegistry, Depends(deps.get_registry)],
     caller: Annotated[Caller | None, Depends(deps.get_caller)],
+    preferences: Annotated[Preferences, Depends(deps.get_preferences)],
 ) -> ScrapeResponse | JSONResponse:
     """Fetch each URL, extract its readable content and optionally summarise.
 
@@ -49,8 +51,11 @@ async def scrape(
     """
     if request.background:
         # Resolved now rather than in the job: a user token lives minutes and a
-        # twenty-URL batch can outlast one.
-        auth = await deps.resolve_job_auth(registry, request.model, caller)
+        # twenty-URL batch can outlast one. Scraping without a summary never
+        # talks to a model, so it must not demand disabled_providers.
+        auth = None
+        if request.summarize:
+            auth = await deps.resolve_job_auth(registry, request.model, caller, preferences)
 
         async def work() -> dict[str, object]:
             response = await run_scrape(
@@ -60,10 +65,13 @@ async def scrape(
                 concurrency=concurrency,
                 caller=caller,
                 auth=auth,
+                preferences=preferences,
             )
             return response.model_dump(mode="json")
 
-        return accepted_response(await runner.submit("scrape", work))
+        return accepted_response(
+            await runner.submit("scrape", work, retention_seconds=preferences.job_retention_seconds)
+        )
 
     return await run_scrape(
         request,
@@ -71,4 +79,5 @@ async def scrape(
         summarizer=summarizer,
         concurrency=concurrency,
         caller=caller,
+        preferences=preferences,
     )

@@ -128,6 +128,9 @@ class PlaywrightBrowserSession:
                 args=["--disable-dev-shm-usage", "--no-sandbox"],
             )
         except Exception as exc:
+            # Launch can fail after the driver starts; that driver still owns pipes
+            # and a subprocess even though there is no browser to use.
+            await self.close()
             raise UpstreamError(
                 "Browser unavailable", detail=f"Could not launch headless Chromium: {exc}"
             ) from exc

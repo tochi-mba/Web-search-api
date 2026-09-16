@@ -63,6 +63,11 @@ class SerperSearchBackend:
         """Resolve this caller's Serper credential, or ``None`` if there is none."""
         if self._keyring is None or not self._keyring.is_configured or self._caller is None:
             return None
+        if self._caller.profile is None:
+            # Serper needs a profile to look up the credential. Skipping lets
+            # failover try a backend that does not, rather than failing a search
+            # that could still run.
+            return None
         try:
             return await self._keyring.resolve(
                 profile=self._caller.profile,

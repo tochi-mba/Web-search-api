@@ -14,7 +14,9 @@ from app.services.llm.base import ChatResponse, ModelInfo
 from app.services.llm.registry import ModelRegistry
 from app.services.llm.summarizer import Summarizer
 from tests.conftest import make_settings
-from tests.fake_keyring import BASE_URL, FakeKeyring
+from tests.fake_keyring import BASE_URL, ISSUER, FakeKeyring
+
+SERVICE_TOKEN = "svc-token-0123456789abcdef0123456789"
 
 
 class Provider:
@@ -58,16 +60,17 @@ def job_runner():
 
 
 @pytest.fixture
-def app(vault, http, providers, job_runner):
+async def app(vault, http, providers, job_runner):
     settings = make_settings(
         keyring_base_url=BASE_URL,
-        keyring_service_token="svc-token",
+        keyring_service_token=SERVICE_TOKEN,
         keyring_service_name=vault.audience,
+        keyring_issuer=ISSUER,
     )
     application = create_app(settings)
-    keyring = KeyringClient(http, base_url=BASE_URL, service_token="svc-token")
+    keyring = KeyringClient(http, base_url=BASE_URL, service_token=SERVICE_TOKEN)
     application.state.token_verifier = TokenVerifier(
-        http, base_url=BASE_URL, audience=vault.audience
+        base_url=BASE_URL, issuer=ISSUER, audience=vault.audience
     )
     registry = ModelRegistry(
         providers,
@@ -78,7 +81,9 @@ def app(vault, http, providers, job_runner):
     application.dependency_overrides[deps.get_registry] = lambda: registry
     application.dependency_overrides[deps.get_summarizer] = lambda: Summarizer(registry)
     application.dependency_overrides[deps.get_job_runner] = lambda: job_runner
-    return application
+    yield application
+    await application.state.token_verifier.aclose()
+    await job_runner.aclose()
 
 
 @pytest.fixture
@@ -93,6 +98,74 @@ def auth_headers(vault, account_id="acct-1", profile=None):
     if profile:
         headers["X-Keyring-Profile"] = profile
     return headers
+
+
+@respx.mock
+async def test_canonical_bearer_header_identifies_the_caller(client, vault):
+    vault.install(respx.mock)
+    vault.connect("anthropic")
+    response = await client.get("/v1/models", headers={"Authorization": f"Bearer {vault.token()}"})
+    assert response.status_code == 200
+    assert "anthropic:m" in [model["id"] for model in response.json()["models"]]
+
+
+@respx.mock
+async def test_conflicting_identity_headers_are_refused(client, vault):
+    vault.install(respx.mock)
+    response = await client.get(
+        "/v1/models",
+        headers={"Authorization": f"Bearer {vault.token('alice')}", **auth_headers(vault, "bob")},
+    )
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("authorization", ["", "Basic value", "Bearer", "Bearer "])
+async def test_malformed_bearer_never_becomes_anonymous(client, authorization):
+    response = await client.get("/v1/models", headers={"Authorization": authorization})
+    assert response.status_code == 401
+
+
+@respx.mock
+async def test_matching_identity_headers_are_allowed(client, vault):
+    vault.install(respx.mock)
+    token = vault.token()
+    response = await client.get(
+        "/v1/models", headers={"Authorization": f"Bearer {token}", "X-Keyring-User-Token": token}
+    )
+    assert response.status_code == 200
+
+
+@respx.mock
+async def test_search_uses_each_callers_serper_connection(client, app, vault, http):
+    from app.services.search.router import SearchRouter
+    from app.services.search.serper import SerperSearchBackend
+
+    vault.install(respx.mock)
+    vault.connect("serper", account_id="acct-1", headers={"X-API-KEY": "alice-key"})
+    vault.connect("serper", account_id="acct-2", headers={"X-API-KEY": "bob-key"})
+    keyring = KeyringClient(http, base_url=BASE_URL, service_token=SERVICE_TOKEN)
+    router = SearchRouter([SerperSearchBackend(http, keyring=keyring)])
+    app.dependency_overrides[deps.get_search_router] = lambda: router
+    app.dependency_overrides[deps.get_page_fetcher] = lambda: object()
+    route = respx.post("https://google.serper.dev/search").mock(
+        return_value=httpx.Response(
+            200, json={"organic": [{"title": "Result", "link": "https://example.test/page"}]}
+        )
+    )
+    for account in ("acct-1", "acct-2"):
+        response = await client.post(
+            "/v1/search",
+            headers=auth_headers(vault, account),
+            json={"queries": [{"query": "test"}], "summarize": False},
+        )
+        assert response.status_code == 200
+        assert response.json()["results"][0]["backend"] == "serper"
+    assert [call.request.headers["X-API-KEY"] for call in route.calls] == ["alice-key", "bob-key"]
+    anonymous = await client.post(
+        "/v1/search", json={"queries": [{"query": "test"}], "summarize": False}
+    )
+    assert anonymous.json()["results"][0]["status"] == "error"
+    assert route.call_count == 2
 
 
 # --- the catalogue is per caller ------------------------------------------- #

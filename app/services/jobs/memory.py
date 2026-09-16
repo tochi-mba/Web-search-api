@@ -74,10 +74,13 @@ class InMemoryJobStore:
 
     def _expired(self, job: Job) -> bool:
         """Whether a finished job has outlived its retention window."""
-        if not job.status.is_terminal or self._retention <= 0:
+        if not job.status.is_terminal:
+            return False
+        retention = job.retention_seconds if job.retention_seconds is not None else self._retention
+        if retention <= 0:
             return False
         finished = job.finished_at if job.finished_at is not None else job.created_at
-        return (self._clock() - finished) >= self._retention
+        return (self._clock() - finished) >= retention
 
     def _purge_locked(self) -> None:
         """Drop expired jobs. Caller must hold the lock."""

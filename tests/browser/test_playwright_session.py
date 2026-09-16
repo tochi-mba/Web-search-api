@@ -103,3 +103,8 @@ async def test_launch_failure_is_reported_as_upstream_error():
     browser._executable_path = "/nonexistent/chromium-binary"
     with pytest.raises(UpstreamError, match="Browser unavailable"):
         await browser.start()
+    try:
+        assert browser._playwright is None
+        assert browser.started is False
+    finally:
+        await browser.close()

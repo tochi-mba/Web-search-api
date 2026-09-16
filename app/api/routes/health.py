@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from app import __version__
 from app.api import deps
@@ -42,11 +42,14 @@ async def health(
 
 
 @router.get("/health/ready", response_model=ReadinessResponse, summary="Readiness probe")
+@router.get("/ready", response_model=ReadinessResponse, include_in_schema=False)
 async def ready(
+    response: Response,
     components: Annotated[list[ReadinessComponent], Depends(deps.get_readiness_components)],
 ) -> ReadinessResponse:
     """Report whether the service can currently serve real traffic."""
     all_ready = all(component.ready for component in components)
+    response.status_code = 200 if all_ready else 503
     return ReadinessResponse(
         status="ok" if all_ready else "degraded",
         ready=all_ready,

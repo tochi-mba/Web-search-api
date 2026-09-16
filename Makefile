@@ -1,36 +1,43 @@
 .DEFAULT_GOAL := help
-UV := uv
+UV ?= uv
 
-.PHONY: help install fmt lint types test cov check run clean
+.PHONY: help install fmt lint type imports test cov check run docker clean
 
-help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}'
+help: ## Show available targets
+	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-install: ## Install all dependencies into .venv
-	$(UV) sync --all-extras
+install: ## Create the virtualenv and install everything
+	$(UV) sync --all-extras --group dev
 
-fmt: ## Auto-format the codebase
-	$(UV) run ruff format app tests scripts
-	$(UV) run ruff check --fix app tests scripts
+fmt: ## Format the codebase
+	$(UV) run ruff format .
+	$(UV) run ruff check --fix .
 
-lint: ## Lint without modifying files
-	$(UV) run ruff format --check app tests scripts
-	$(UV) run ruff check app tests scripts
+lint: ## Lint (no fixes)
+	$(UV) run ruff format --check .
+	$(UV) run ruff check .
 
-types: ## Strict type check
-	$(UV) run mypy app tests
+type: ## Strict type check
+	$(UV) run mypy
 
-test: ## Run the test suite
-	$(UV) run pytest
+imports: ## Enforce the architectural layering contracts
+	$(UV) run lint-imports
 
-cov: ## Run tests with the 100% coverage gate
-	$(UV) run pytest --cov=app --cov-report=term-missing --cov-report=xml
+test: ## Run the test suite with 100% branch coverage enforced
+	$(UV) run pytest --cov --cov-report=term-missing
 
-check: lint types cov ## Everything CI runs
+cov: ## Write an HTML coverage report to htmlcov/
+	$(UV) run pytest --cov --cov-report=html
 
-run: ## Run the API locally with reload
-	$(UV) run uvicorn app.main:app --reload --port 8000
+check: lint type imports test ## Everything CI runs
 
-clean: ## Remove caches and build artefacts
-	rm -rf .pytest_cache .ruff_cache .mypy_cache .coverage coverage.xml htmlcov dist build
-	find . -type d -name __pycache__ -prune -exec rm -rf {} +
+run: ## Serve the API on :8006 with reload
+	$(UV) run uvicorn app.main:app --reload --port 8006
+
+docker: ## Build the container image
+	docker build -t web-search-api:local .
+
+clean: ## Remove caches and build output
+	rm -rf .pytest_cache .mypy_cache .ruff_cache .hypothesis htmlcov .coverage coverage.xml build dist
+	find . -name '__pycache__' -type d -prune -exec rm -rf {} +

@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 
 #: Paths that never require authentication, so probes keep working.
 PUBLIC_PATHS = frozenset(
-    {"/health", "/healthy", "/health/ready", "/docs", "/redoc", "/openapi.json"}
+    {"/health", "/healthy", "/health/ready", "/ready", "/docs", "/redoc", "/openapi.json"}
 )
 
 
@@ -66,7 +66,7 @@ def build_auth_middleware(settings: Settings) -> Callable[[Request, Handler], Aw
         if not settings.auth_enabled or request.url.path in PUBLIC_PATHS:
             return await call_next(request)
 
-        presented = request.headers.get("X-API-Key") or _bearer(request)
+        presented = request.headers.get("X-API-Key")
         if presented is None or presented not in settings.api_keys:
             error = AuthError(
                 "Missing or invalid API key",
@@ -81,10 +81,3 @@ def build_auth_middleware(settings: Settings) -> Callable[[Request, Handler], Aw
         return await call_next(request)
 
     return auth_middleware
-
-
-def _bearer(request: Request) -> str | None:
-    """Extract a bearer token from the Authorization header, if present."""
-    header = request.headers.get("Authorization", "")
-    scheme, _, token = header.partition(" ")
-    return token if scheme.lower() == "bearer" and token else None

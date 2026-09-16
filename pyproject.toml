@@ -19,17 +19,20 @@ dependencies = [
     "openai>=1.55",
     "pyjwt>=2.13.0",
     "cryptography>=50.0.1",
+    "keyring-client",
+    "settings-client",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
+    "hypothesis>=6.115",
+    "import-linter>=2.1",
+    "mypy>=1.13",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
     "respx>=0.21",
-    "hypothesis>=6.115",
     "ruff>=0.8",
-    "mypy>=1.13",
 ]
 
 [build-system]
@@ -45,44 +48,91 @@ packages = ["app"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+src = ["app", "tests"]
 
 [tool.ruff.lint]
 select = [
-    "E", "W",    # pycodestyle
-    "F",         # pyflakes
-    "I",         # isort
-    "N",         # pep8-naming
-    "UP",        # pyupgrade
-    "B",         # bugbear
-    "C4",        # comprehensions
-    "SIM",       # simplify
-    "RUF",       # ruff-specific
-    "ASYNC",     # async correctness
-    "S",         # bandit
-    "T20",       # no print
-    "PT",        # pytest style
-    "ANN",       # type annotations
-    "D",         # docstrings
+    "A",      # builtin shadowing
+    "ANN",    # missing annotations
+    "ARG",    # unused arguments
+    "ASYNC",  # async correctness
+    "B",      # bugbear
+    "C4",     # comprehensions
+    "DTZ",    # naive datetimes
+    "E",      # pycodestyle errors
+    "EM",     # exception message hygiene
+    "ERA",    # commented-out code
+    "F",      # pyflakes
+    "FA",     # future annotations
+    "I",      # import sorting
+    "ICN",    # import conventions
+    "N",      # pep8-naming
+    "PERF",   # performance anti-patterns
+    "PIE",
+    "PL",     # pylint subset
+    "PT",     # pytest style
+    "PTH",    # use pathlib
+    "RET",    # return hygiene
+    "RSE",
+    "RUF",
+    "S",      # bandit
+    "SIM",    # simplify
+    "SLF",    # private member access
+    "T20",    # no print
+    "TC",     # typing-only imports
+    "TID",    # tidy imports
+    "TRY",    # exception hygiene
+    "UP",     # pyupgrade
+    "W",      # pycodestyle warnings
 ]
 ignore = [
-    "D203",   # conflicts with D211
-    "D213",   # conflicts with D212
-    "ANN401", # allow Any where genuinely needed
+    "ANN401",  # Any is occasionally the honest annotation
+    "TRY003",  # long messages inline are clearer than an exception subclass per message
+    # The families below fire well over 150 times on this codebase (DomainError
+    # constructed with a string, FastAPI/runtime annotations, lazy provider
+    # imports, magic numbers in timeouts and status codes). Aligning them is a
+    # dedicated pass, not this one.
+    "EM101",
+    "EM102",
+    "TC001",
+    "TC002",
+    "TC003",
+    "PLR0911",
+    "PLR0913",
+    "PLR0917",
+    "PLR2004",
+    "PLC0415",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = [
-    "S101",   # asserts are the point
-    "S105",   # test tokens are fixtures, not leaked secrets
+"tests/**" = [
+    "S101",    # asserts are the point
+    "S105",    # test tokens are fixtures, not leaked secrets
     "S106",
-    "D",      # tests document themselves through their names
-    "ANN",    # annotations add noise to fixtures and helpers
+    "S104",    # asserting on "0.0.0.0" is not binding to it
+    "ANN",     # annotations add noise to fixtures and helpers
     "T20",
+    "SLF001",  # tests may inspect private state
+    "ARG001",  # fakes and handlers mirror signatures they do not all use
+    "ARG002",
+    "ARG005",
+    "PLW0108", # FastAPI overrides are zero-arg callables, not inlined values
 ]
-"scripts/*" = ["T20", "D"]
+"scripts/*" = ["T20"]
 # The "Problem" suffix is deliberate: ValidationError and TimeoutError are
 # already taken by pydantic and asyncio, and shadowing them invites bugs.
 "app/core/errors.py" = ["N818"]
+# FastAPI resolves handler annotations at runtime to build the dependency graph
+# and the OpenAPI schema, so its type-only-looking imports must stay importable.
+"app/api/routes/*" = ["TC001", "TC002", "TC003"]
+"app/api/deps.py" = ["TC001", "TC002", "TC003"]
+"app/schemas/*" = ["TC001", "TC002", "TC003"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -92,17 +142,20 @@ convention = "google"
 # --------------------------------------------------------------------------- #
 [tool.mypy]
 python_version = "3.11"
+files = ["app", "tests"]
 strict = true
 warn_unreachable = true
-disallow_any_generics = true
-plugins = []
+warn_unused_ignores = true
+disallow_any_unimported = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 
 [[tool.mypy.overrides]]
 module = ["selectolax.*", "playwright.*"]
 ignore_missing_imports = true
 
-# Application code is strictly typed. Tests stay type-checked but are not made
-# to annotate every fixture and helper - that is noise, not safety.
+# Media-tool types tests strictly. Doing the same here is 1,200+ missing
+# annotations on fixtures and helpers; that is a dedicated pass, not this one.
+# Tests stay type-checked for the calls they make.
 [[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
@@ -139,3 +192,108 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "@(abc\\.)?abstractmethod",
 ]
+
+[tool.uv.sources]
+keyring-client = { path = "../Keyring-api/clients/python", editable = true }
+settings-client = { path = "../Settings-api/clients/python", editable = true }
+
+# --------------------------------------------------------------------------- #
+# Architecture (layering is enforced, not merely documented)
+# --------------------------------------------------------------------------- #
+[tool.importlinter]
+root_package = "app"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Services do not import the API layer"
+type = "forbidden"
+source_modules = [
+    "app.services",
+    "app.core",
+    "app.config",
+    "app.constants",
+    "app.schemas",
+    "app.bootstrap",
+]
+forbidden_modules = ["app.api"]
+# app.main is the factory: it is the one module allowed to import routes.
+
+[[tool.importlinter.contracts]]
+name = "Keyring is spoken to from one package"
+type = "forbidden"
+source_modules = [
+    "app.api",
+    "app.core",
+    "app.constants",
+    "app.schemas",
+    "app.services.search",
+    "app.services.llm",
+    "app.services.jobs",
+    "app.services.text",
+    "app.services.fetch",
+    "app.services.preferences",
+    "app.services.robots",
+    "app.services.urlsafety",
+    "app.services.pipelines",
+]
+forbidden_modules = ["keyring_client", "jwt"]
+# app.services.keyring is the one package that talks to keyring. app.config is
+# left off on purpose: it validates the service token and the audience with the
+# rules keyring enforces, rather than with a copy of them that could drift.
+# app.bootstrap and app.main are the composition root and may construct a
+# verifier; they currently go through app.services.keyring instead.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Settings-api is spoken to from one module"
+type = "forbidden"
+source_modules = [
+    "app.api",
+    "app.core",
+    "app.config",
+    "app.constants",
+    "app.schemas",
+    "app.services.search",
+    "app.services.llm",
+    "app.services.jobs",
+    "app.services.text",
+    "app.services.fetch",
+    "app.services.keyring",
+    "app.services.robots",
+    "app.services.urlsafety",
+    "app.services.pipelines",
+]
+forbidden_modules = ["settings_client"]
+# app.services.preferences is the one module that reads settings-api.
+# app.bootstrap and app.main are the composition root and may construct the
+# client; they currently go through build_preference_source instead.
+# app.config validates the token with keyring_client.check_service_token.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Playwright stays behind the browser adapter"
+type = "forbidden"
+source_modules = [
+    "app.api",
+    "app.core",
+    "app.config",
+    "app.constants",
+    "app.schemas",
+    "app.main",
+    "app.bootstrap",
+    "app.services.search",
+    "app.services.llm",
+    "app.services.jobs",
+    "app.services.keyring",
+    "app.services.text",
+    "app.services.preferences",
+    "app.services.robots",
+    "app.services.urlsafety",
+    "app.services.pipelines",
+    "app.services.fetch.http",
+    "app.services.fetch.page",
+]
+forbidden_modules = ["playwright"]
+# The page fetcher constructs the browser adapter, so it imports that module --
+# but it still must not reach Playwright itself, which is what this asserts.
+allow_indirect_imports = true

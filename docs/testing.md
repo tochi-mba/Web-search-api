@@ -93,7 +93,7 @@ They belong in a manual smoke run with real keys:
 ```bash
 export ANTHROPIC_API_KEY=...
 make run
-curl -s localhost:8000/v1/models | jq '.default_model, .providers'
-curl -s -X POST localhost:8000/v1/scrape -H 'content-type: application/json' \
+curl -s localhost:8006/v1/models | jq '.default_model, .providers'
+curl -s -X POST localhost:8006/v1/scrape -H 'content-type: application/json' \
   -d '{"urls":["https://example.com"]}' | jq
 ```

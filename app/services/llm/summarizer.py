@@ -13,12 +13,15 @@ from dataclasses import dataclass, field
 
 from app import constants
 from app.core.logging import get_logger
+from app.schemas.common import Usage
+from app.schemas.summary import SummaryOut
 from app.services.keyring.caller import Caller
 from app.services.keyring.client import ResolvedAuth
 from app.services.llm.base import ChatMessage, ChatRequest
 from app.services.llm.capabilities import resolve_capabilities
 from app.services.llm.prompts import build_summary_prompt
 from app.services.llm.registry import ModelRegistry
+from app.services.preferences import Preferences
 from app.services.text.truncate import char_budget_for_context, truncate
 
 logger = get_logger(__name__)
@@ -45,6 +48,24 @@ class Summary:
     original_chars: int = 0
     notes_applied: bool = False
     param_adjustments: list[str] = field(default_factory=list)
+
+    def as_out(self) -> SummaryOut:
+        """Render as the API summary object."""
+        return SummaryOut(
+            executive_summary=self.executive_summary,
+            key_points=self.key_points,
+            model=self.model,
+            provider=self.provider,
+            usage=Usage(
+                input_tokens=self.input_tokens,
+                output_tokens=self.output_tokens,
+            ),
+            truncated=self.truncated,
+            chars_submitted=self.chars_submitted,
+            original_chars=self.original_chars,
+            notes_applied=self.notes_applied,
+            param_adjustments=self.param_adjustments,
+        )
 
 
 def parse_summary_payload(text: str) -> tuple[str, list[str]]:
@@ -140,6 +161,7 @@ class Summarizer:
         sources: list[str] | None = None,
         caller: Caller | None = None,
         auth: ResolvedAuth | None = None,
+        preferences: Preferences | None = None,
     ) -> Summary:
         """Summarise ``content`` with the requested model.
 
@@ -147,7 +169,19 @@ class Summarizer:
         the resolved model's context window can hold, so a 200K-context model
         truncates harder than a 1M one without the caller doing anything.
         """
-        model = await self._registry.resolve(model_id, caller)
+        disabled = (
+            preferences.require_disabled_providers() if preferences is not None else frozenset()
+        )
+        default_model = preferences.default_model if preferences is not None else None
+        hard_limit = (
+            preferences.max_content_chars if preferences is not None else self._max_content_chars
+        )
+        model = await self._registry.resolve(
+            model_id,
+            caller,
+            disabled_providers=disabled,
+            default_model=default_model,
+        )
         capabilities = resolve_capabilities(
             model.model,
             live_context_window=model.context_window,
@@ -156,7 +190,7 @@ class Summarizer:
 
         budget = char_budget_for_context(
             context_window=capabilities.context_window,
-            hard_limit=self._max_content_chars,
+            hard_limit=hard_limit,
         )
         bounded = truncate(content, limit=budget)
 
@@ -191,6 +225,8 @@ class Summarizer:
             model_id=model.id,
             caller=caller,
             auth=auth,
+            disabled_providers=disabled,
+            default_model=default_model,
         )
 
         executive_summary, key_points = parse_summary_payload(response.text)

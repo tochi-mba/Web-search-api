@@ -17,6 +17,7 @@ from app.services.keyring.caller import Caller
 from app.services.llm.registry import ModelRegistry
 from app.services.llm.summarizer import Summarizer
 from app.services.pipelines import run_search
+from app.services.preferences import Preferences
 from app.services.search.router import SearchRouter
 
 router = APIRouter(prefix="/v1", tags=["search"])
@@ -40,6 +41,7 @@ async def search(
     runner: Annotated[JobRunner, Depends(deps.get_job_runner)],
     registry: Annotated[ModelRegistry, Depends(deps.get_registry)],
     caller: Annotated[Caller | None, Depends(deps.get_caller)],
+    preferences: Annotated[Preferences, Depends(deps.get_preferences)],
 ) -> SearchResponse | JSONResponse:
     """Run a batch of search queries and optionally summarise what comes back.
 
@@ -55,8 +57,11 @@ async def search(
     if request.background:
         # Resolve the credential now, while the caller's token is still fresh,
         # and hand the job the result rather than the token: tokens live
-        # minutes and a large batch can outlast one.
-        auth = await deps.resolve_job_auth(registry, request.model, caller)
+        # minutes and a large batch can outlast one. Search without a summary
+        # never talks to a model, so it must not demand disabled_providers.
+        auth = None
+        if request.summarize:
+            auth = await deps.resolve_job_auth(registry, request.model, caller, preferences)
 
         async def work() -> dict[str, object]:
             response = await run_search(
@@ -67,10 +72,13 @@ async def search(
                 concurrency=concurrency,
                 caller=caller,
                 auth=auth,
+                preferences=preferences,
             )
             return response.model_dump(mode="json")
 
-        return accepted_response(await runner.submit("search", work))
+        return accepted_response(
+            await runner.submit("search", work, retention_seconds=preferences.job_retention_seconds)
+        )
 
     return await run_search(
         request,
@@ -79,4 +87,5 @@ async def search(
         summarizer=summarizer,
         concurrency=concurrency,
         caller=caller,
+        preferences=preferences,
     )

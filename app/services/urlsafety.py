@@ -63,16 +63,18 @@ def assert_public_ip(address: str, *, host: str) -> None:
     """Raise unless ``address`` is a routable public IP.
 
     Args:
-        address: The IP address to check, as a string.
+        address: The IP address to check, as a string. The resolver is injected,
+            so what reaches here is not guaranteed to parse as one.
         host: The hostname it came from, used only for the error message.
 
     Raises:
-        ForbiddenUrlError: If the address is private, loopback, link-local,
-            multicast, reserved or otherwise not globally routable.
+        ForbiddenUrlError: If the address does not parse as an IP address, or is
+            private, loopback, link-local, multicast, reserved or otherwise not
+            globally routable.
     """
     try:
         ip = ipaddress.ip_address(address)
-    except ValueError as exc:  # pragma: no cover - defensive, resolvers return valid IPs
+    except ValueError as exc:
         raise ForbiddenUrlError(
             "Unresolvable address", detail=f"{host} produced an invalid address."
         ) from exc
