@@ -9,3 +9,4 @@ jobs:
     uses: tochi-mba/LUCY-assistant/.github/workflows/service.yml@v1
     with:
       live-browser-job: true
+      live-browser-marker: browser
