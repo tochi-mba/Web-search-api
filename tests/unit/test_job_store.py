@@ -144,6 +144,20 @@ async def test_finished_jobs_expire_after_the_retention_window(store, clock):
     assert await store.get(job.id) is None
 
 
+async def test_a_job_carries_its_own_retention_window(clock):
+    store = InMemoryJobStore(retention_seconds=100.0, max_jobs=5, clock=clock)
+    short = finished(at=clock.now)
+    short.retention_seconds = 10.0
+    long = finished(at=clock.now)
+    long.retention_seconds = 1_000.0
+    await store.put(short)
+    await store.put(long)
+
+    clock.advance(10.0)
+    assert await store.get(short.id) is None
+    assert await store.get(long.id) is not None
+
+
 async def test_finished_jobs_survive_within_the_window(store, clock):
     job = finished(at=clock.now)
     await store.put(job)

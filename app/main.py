@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -17,6 +18,7 @@ from app.core.errors import DomainError, ValidationProblem
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import build_auth_middleware, request_context_middleware
 from app.services.fetch.browser import resolve_executable_path
+from app.services.preferences import build_preference_source
 
 logger = get_logger(__name__)
 
@@ -65,7 +67,7 @@ async def http_exception_handler(request: Request, exc: Exception) -> JSONRespon
     return _problem_response(problem, exc.status_code)
 
 
-async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+async def unhandled_error_handler(request: Request, _exc: Exception) -> JSONResponse:
     """Last-resort handler: never leak a traceback to the caller."""
     logger.exception("request.unhandled_error", path=request.url.path)
     problem = {
@@ -85,7 +87,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     logger.info("service.starting", service=settings.service_name, version=__version__)
 
-    services = build_services(settings)
+    services = build_services(settings, preferences=getattr(app.state, "preferences", None))
     app.state.services = services
     app.state.model_registry = services.registry
     app.state.summarizer = services.summarizer
@@ -94,6 +96,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.job_runner = services.job_runner
     app.state.keyring = services.keyring
     app.state.token_verifier = services.token_verifier
+    app.state.preferences = services.preferences
 
     # The browser starts lazily on first use, so readiness reflects whether a
     # browser could be launched at all rather than whether one is running.
@@ -106,11 +109,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("service.stopped", service=settings.service_name)
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, *, settings_client: Any = None) -> FastAPI:
     """Build the FastAPI application.
 
     Args:
         settings: Optional settings override, primarily for tests.
+        settings_client: Substituted by tests with a fake settings-api client.
+            Constructed at startup; it makes no network call until the first
+            resolve.
     """
     settings = settings or get_settings()
     configure_logging(level=settings.log_level, json_logs=settings.json_logs)
@@ -125,6 +131,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.preferences = build_preference_source(settings, client=settings_client)
 
     app.middleware("http")(build_auth_middleware(settings))
     app.middleware("http")(request_context_middleware)

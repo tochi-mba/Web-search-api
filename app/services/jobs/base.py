@@ -49,14 +49,24 @@ class Job:
     error: dict[str, str] | None = None
     """The compact error object used by batch items, when the job failed."""
 
+    retention_seconds: float | None = None
+    """How long this finished job stays readable. ``None`` uses the store default.
+
+    Computed from the owner's settings at submit time and carried on the job,
+    because the reaper has no user token with which to ask settings-api again.
+    """
+
     @staticmethod
-    def create(kind: str, *, now: float | None = None) -> Job:
+    def create(
+        kind: str, *, now: float | None = None, retention_seconds: float | None = None
+    ) -> Job:
         """Build a fresh queued job."""
         return Job(
             id=uuid.uuid4().hex,
             kind=kind,
             status=JobStatus.QUEUED,
             created_at=now if now is not None else time.time(),
+            retention_seconds=retention_seconds,
         )
 
     @property

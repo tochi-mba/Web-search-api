@@ -7,7 +7,7 @@ That identity travels as a :class:`Caller`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,10 +21,15 @@ class Caller:
     person - keyring deliberately keeps email addresses out of these tokens.
     """
 
-    profile: str
-    """Which of the account's credential sets to draw from, e.g. ``personal``."""
+    profile: str | None
+    """Which of the account's credential sets to draw from, e.g. ``personal``.
 
-    user_token: str
+    ``None`` when the request named none and the default could not be read
+    honestly. Operations that need a profile fail then; operations that do not
+    proceed.
+    """
+
+    user_token: str = field(repr=False)
     """The short-lived token, forwarded to keyring on each resolve."""
 
     @property
@@ -34,4 +39,4 @@ class Caller:
         Deliberately not the token: tokens live minutes, so keying on one would
         throw the catalogue away every time a caller refreshed it.
         """
-        return (self.account_id, self.profile)
+        return (self.account_id, self.profile or "")

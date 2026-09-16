@@ -26,6 +26,7 @@ from app.services.llm.providers.openai_compatible import OpenAICompatibleProvide
 from app.services.llm.registry import ModelRegistry
 from app.services.llm.specs import OPENAI_COMPATIBLE_SPECS
 from app.services.llm.summarizer import Summarizer
+from app.services.preferences import PreferenceSource, build_preference_source
 from app.services.robots import RobotsPolicy
 from app.services.search.base import SearchBackend
 from app.services.search.google import GoogleSearchBackend
@@ -48,7 +49,8 @@ class Services:
     search_router: SearchRouter
     job_runner: JobRunner
     keyring: KeyringClient
-    token_verifier: TokenVerifier
+    token_verifier: TokenVerifier | None
+    preferences: PreferenceSource
 
     async def aclose(self) -> None:
         """Release every resource, best effort."""
@@ -56,6 +58,9 @@ class Services:
         # leaves no task reaching for a closed client on the way out.
         await self.job_runner.aclose()
         await self.browser.close()
+        await self.preferences.aclose()
+        if self.token_verifier is not None:
+            await self.token_verifier.aclose()
         await self.http_client.aclose()
 
 
@@ -63,37 +68,31 @@ def build_llm_providers(settings: Settings, client: httpx.AsyncClient) -> list[L
     """Instantiate every LLM provider this deployment knows about.
 
     Providers hold no credentials: those belong to whoever is calling and are
-    resolved per request from keyring. So every provider is constructed, and
-    whether it is *usable* is decided per caller by probing.
+    resolved per request from keyring. So every provider is constructed, even
+    ones the operator or a person has disabled -- filtering happens per caller
+    at catalogue time, not at process start. Disabling at construction would
+    make a per-account "turn off provider X" impossible without a restart.
     """
-    disabled = set(settings.disabled_providers)
-
     anthropic = AnthropicProvider(timeout_seconds=settings.request_timeout_seconds * 3)
-    providers: list[LLMProvider] = []
+    providers: list[LLMProvider] = [anthropic]
 
-    if anthropic.name not in disabled:
-        providers.append(anthropic)
-
-    if "ollama" not in disabled:
-        providers.append(
-            OllamaProvider(
-                client,
-                base_url=settings.provider_base_urls.get("ollama"),
-                timeout_seconds=settings.request_timeout_seconds * 3,
-            )
+    providers.append(
+        OllamaProvider(
+            client,
+            base_url=settings.provider_base_urls.get("ollama"),
+            timeout_seconds=settings.request_timeout_seconds * 3,
         )
+    )
 
-    for spec in OPENAI_COMPATIBLE_SPECS:
-        if spec.key in disabled:
-            continue
-        providers.append(
-            OpenAICompatibleProvider(
-                spec,
-                client,
-                base_url=settings.provider_base_urls.get(spec.key),
-                timeout_seconds=settings.request_timeout_seconds * 3,
-            )
+    providers.extend(
+        OpenAICompatibleProvider(
+            spec,
+            client,
+            base_url=settings.provider_base_urls.get(spec.key),
+            timeout_seconds=settings.request_timeout_seconds * 3,
         )
+        for spec in OPENAI_COMPATIBLE_SPECS
+    )
 
     return providers
 
@@ -120,8 +119,17 @@ def build_search_backends(
     ]
 
 
-def build_services(settings: Settings) -> Services:
-    """Build every long-lived service from settings."""
+def build_services(
+    settings: Settings,
+    *,
+    preferences: PreferenceSource | None = None,
+) -> Services:
+    """Build every long-lived service from settings.
+
+    ``preferences`` is constructed here when the caller does not pass one.
+    The client it wraps makes no network call until the first resolve -- do
+    not fetch settings during startup.
+    """
     client = httpx.AsyncClient(
         follow_redirects=False,
         limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
@@ -137,16 +145,20 @@ def build_services(settings: Settings) -> Services:
     keyring = KeyringClient(
         client,
         base_url=settings.keyring_base_url,
-        service_token=settings.keyring_service_token,
+        service_token=settings.keyring_service_token.get_secret_value(),
         timeout_seconds=settings.keyring_timeout_seconds,
     )
-    token_verifier = TokenVerifier(
-        client,
-        base_url=settings.keyring_base_url,
-        audience=settings.keyring_service_name,
-        cache_seconds=settings.jwks_cache_seconds,
-        timeout_seconds=settings.keyring_timeout_seconds,
-    )
+    token_verifier = None
+    if settings.keyring_enabled:
+        token_verifier = TokenVerifier(
+            base_url=settings.keyring_base_url,
+            issuer=settings.keyring_issuer,
+            audience=settings.keyring_service_name,
+            cache_seconds=settings.jwks_cache_seconds,
+            min_refetch_seconds=settings.jwks_min_refetch_seconds,
+            stale_grace_seconds=settings.jwks_stale_grace_seconds,
+            timeout_seconds=settings.keyring_timeout_seconds,
+        )
 
     providers = build_llm_providers(settings, client)
     registry = ModelRegistry(
@@ -190,6 +202,9 @@ def build_services(settings: Settings) -> Services:
         max_concurrent=settings.max_background_jobs,
     )
 
+    if preferences is None:
+        preferences = build_preference_source(settings)
+
     logger.info(
         "services.built",
         providers=len(providers),
@@ -208,4 +223,5 @@ def build_services(settings: Settings) -> Services:
         job_runner=job_runner,
         keyring=keyring,
         token_verifier=token_verifier,
+        preferences=preferences,
     )

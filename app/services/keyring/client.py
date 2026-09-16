@@ -25,8 +25,8 @@ USER_TOKEN_HEADER = "X-Keyring-User-Token"  # noqa: S105 - a header name
 class ResolvedAuth:
     """What to attach to an outgoing request for one user and service."""
 
-    headers: dict[str, str] = field(default_factory=dict)
-    query_params: dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict, repr=False)
+    query_params: dict[str, str] = field(default_factory=dict, repr=False)
     expires_at: datetime | None = None
 
     @property

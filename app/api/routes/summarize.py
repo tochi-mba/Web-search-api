@@ -16,6 +16,7 @@ from app.services.keyring.caller import Caller
 from app.services.llm.registry import ModelRegistry
 from app.services.llm.summarizer import Summarizer
 from app.services.pipelines import run_summarize
+from app.services.preferences import Preferences
 
 router = APIRouter(prefix="/v1", tags=["summarize"])
 
@@ -35,6 +36,7 @@ async def summarize(
     runner: Annotated[JobRunner, Depends(deps.get_job_runner)],
     registry: Annotated[ModelRegistry, Depends(deps.get_registry)],
     caller: Annotated[Caller | None, Depends(deps.get_caller)],
+    preferences: Annotated[Preferences, Depends(deps.get_preferences)],
 ) -> SummarizeResponse | JSONResponse:
     """Summarise text the caller already has.
 
@@ -44,12 +46,24 @@ async def summarize(
     With ``background`` (or ``async``) set, returns 202 with a job id to poll.
     """
     if request.background:
-        auth = await deps.resolve_job_auth(registry, request.model, caller)
+        auth = await deps.resolve_job_auth(registry, request.model, caller, preferences)
 
         async def work() -> dict[str, object]:
-            response = await run_summarize(request, summarizer=summarizer, caller=caller, auth=auth)
+            response = await run_summarize(
+                request,
+                summarizer=summarizer,
+                caller=caller,
+                auth=auth,
+                preferences=preferences,
+            )
             return response.model_dump(mode="json")
 
-        return accepted_response(await runner.submit("summarize", work))
+        return accepted_response(
+            await runner.submit(
+                "summarize", work, retention_seconds=preferences.job_retention_seconds
+            )
+        )
 
-    return await run_summarize(request, summarizer=summarizer, caller=caller)
+    return await run_summarize(
+        request, summarizer=summarizer, caller=caller, preferences=preferences
+    )

@@ -37,7 +37,6 @@ async def test_protected_route_rejects_missing_key(secured_app):
     "headers",
     [
         {"X-API-Key": "secret-key"},
-        {"Authorization": "Bearer secret-key"},
     ],
 )
 async def test_protected_route_accepts_valid_credentials(secured_app, headers):
@@ -66,6 +65,12 @@ async def test_malformed_authorization_header_is_rejected(secured_app):
 
     async with build_client(secured_app) as client:
         response = await client.get("/v1/thing", headers={"Authorization": "Basic zzz"})
+    assert response.status_code == 401
+
+
+async def test_bearer_identity_does_not_replace_the_api_key_gate(secured_app):
+    async with build_client(secured_app) as client:
+        response = await client.get("/v1/models", headers={"Authorization": "Bearer secret-key"})
     assert response.status_code == 401
 
 

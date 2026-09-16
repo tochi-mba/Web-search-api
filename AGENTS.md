@@ -12,8 +12,9 @@ intended to sit behind an MCP server.
 
 1. **Tests come first.** This codebase was built test-first and the coverage
    gate is `fail_under = 100`. A change without tests will fail CI.
-2. **`make check` must pass** before any commit: `ruff format --check`,
-   `ruff check`, `mypy --strict`, and `pytest` at 100% coverage.
+2. **`make check` must pass** before any commit: `lint` (ruff format + check),
+   `type` (mypy strict), `imports` (import-linter contracts), and `test`
+   (pytest at 100% branch coverage).
 3. **Never weaken the coverage gate** to get a change through. If a line is
    genuinely unreachable, restructure it rather than adding a `pragma`.
 4. **Never let a credential become process-wide again.** Keys belong to callers,
@@ -45,6 +46,7 @@ app/
                   prompts, summarizer
     jobs/         job types, in-memory store, background runner
     keyring/      credential resolution, local token verification, Caller
+    preferences.py per-person settings from settings-api (ships dark)
     pipelines.py  the work behind each endpoint, shared by sync and background
   api/            deps (DI), mapping, routes
 tests/
@@ -57,7 +59,10 @@ tests/
 ## Conventions
 
 - **Python 3.11**, fully typed, `mypy --strict` on `app/`. Tests are type-checked
-  but not required to annotate every fixture.
+  but not required to annotate every fixture. Import-linter contracts in
+  `pyproject.toml` keep `keyring_client` in `app.services.keyring` and
+  `app.config`, `settings_client` in `app.services.preferences`, Playwright
+  in the browser adapter, and the API layer out of services.
 - **Google-style docstrings** on every public module, class and function.
 - **Line length 100.** `ruff format` decides formatting; do not hand-wrap.
 - **Comments explain *why*, never *what*.** If a comment restates the code,
@@ -82,7 +87,7 @@ If it speaks OpenAI's wire format — most do — it is **one row** in
 `app/services/llm/specs.py`:
 
 ```python
-_spec("acme", "Acme AI", "https://api.acme.ai/v1"),
+(_spec("acme", "Acme AI", "https://api.acme.ai/v1"),)
 ```
 
 That is the whole change. The provider key doubles as the keyring service name,

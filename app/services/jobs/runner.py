@@ -59,18 +59,20 @@ class JobRunner:
         """How many jobs are currently submitted but not finished."""
         return len(self._tasks)
 
-    async def submit(self, kind: str, work: Work) -> Job:
+    async def submit(self, kind: str, work: Work, *, retention_seconds: float | None = None) -> Job:
         """Queue ``work`` and return its job straight away.
 
         Args:
             kind: Which operation this is, e.g. ``"scrape"``.
             work: Zero-argument callable returning an awaitable. Its result must
                 be JSON-serialisable, since it is stored and returned verbatim.
+            retention_seconds: How long this finished job stays readable. ``None``
+                uses the store's default, which is the deployment-wide window.
 
         Returns:
             The freshly created job, in ``queued`` state.
         """
-        job = Job.create(kind, now=self._clock())
+        job = Job.create(kind, now=self._clock(), retention_seconds=retention_seconds)
         await self._store.put(job)
 
         task = asyncio.create_task(self._execute(job, work, request_id_var.get()))

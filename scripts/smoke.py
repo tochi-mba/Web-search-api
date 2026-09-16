@@ -16,7 +16,7 @@ import sys
 
 import httpx
 
-DEFAULT_BASE = "http://localhost:8000"
+DEFAULT_BASE = "http://localhost:8006"
 
 
 def show(title: str, payload: object) -> None:

@@ -15,10 +15,10 @@ credential any more.
 you ──► keyring   POST /v1/auth/service-token {"audience": "web-search-api"}
                   └─► a short-lived signed token
 
-you ──► web-search-api   X-Keyring-User-Token: <that token>
+you ──► web-search-api   Authorization: Bearer <that token>
         │
         ├─ verifies the token locally against keyring's published keys
-        │  (RS256, audience checked, no round trip)
+        │  (RS256, issuer and audience pinned, signing keys cached)
         │
         └─► keyring   GET /v1/internal/credentials/{profile}/{service}
                       Authorization: Bearer <web-search-api's service token>
@@ -38,7 +38,8 @@ was not given a token for.
 ### 1. Tell keyring about this service
 
 ```bash
-export KEYRING_SERVICE_TOKENS__WEB_SEARCH_API="$(openssl rand -hex 32)"
+SERVICE_TOKEN=$(openssl rand -hex 32)
+export KEYRING_SERVICE_TOKENS="$(jq -nc --arg token "$SERVICE_TOKEN" '{"web-search-api": $token}')"
 ```
 
 ### 2. Point web-search-api at keyring
@@ -50,7 +51,9 @@ WSA_KEYRING_SERVICE_NAME=web-search-api
 ```
 
 `WSA_KEYRING_SERVICE_NAME` must match the audience callers mint tokens for, and
-the key under `KEYRING_SERVICE_TOKENS__`.
+the key in keyring's `KEYRING_SERVICE_TOKENS` JSON mapping.
+Set `WSA_KEYRING_ISSUER` to keyring's `KEYRING_ISSUER` (locally,
+`http://127.0.0.1:8001`).
 
 ### 3. Store your provider keys
 
@@ -77,15 +80,17 @@ USER_TOKEN=$(curl -sX POST http://127.0.0.1:8001/v1/auth/service-token \
   -H 'Content-Type: application/json' \
   -d '{"audience":"web-search-api"}' | jq -r .token)
 
-curl -s localhost:8000/v1/models -H "X-Keyring-User-Token: $USER_TOKEN" | jq
+curl -s localhost:8006/v1/models -H "Authorization: Bearer $USER_TOKEN" | jq
 ```
 
 ## Headers
 
 | Header | Required | Meaning |
 |---|---|---|
-| `X-Keyring-User-Token` | for any credentialed provider | Who the request is for |
-| `X-Keyring-Profile` | no | Which credential set; defaults to `WSA_KEYRING_DEFAULT_PROFILE` |
+| `Authorization: Bearer <token>` | for any credentialed provider | Who the request is for |
+| `X-Keyring-User-Token` | legacy alternative for one release | Deprecated; conflicting identity headers are rejected |
+| `X-API-Key` | when the deployment configures API keys | Separate front-door gate; a Bearer token does not replace it |
+| `X-Keyring-Profile` | no | Which credential set; defaults to this person's `common.default_profile`, or `WSA_KEYRING_DEFAULT_PROFILE` when settings-api is off |
 
 A request without a token is legal and still works against providers that need
 no credential. It fails only when it actually needs a secret, with a `404`
@@ -97,8 +102,8 @@ Profiles are named credential sets. `personal` and `work` can hold different
 OpenAI keys, and the same account gets a different catalogue from each:
 
 ```bash
-curl -s localhost:8000/v1/models \
-  -H "X-Keyring-User-Token: $USER_TOKEN" \
+curl -s localhost:8006/v1/models \
+  -H "Authorization: Bearer $USER_TOKEN" \
   -H "X-Keyring-Profile: work"
 ```
 
@@ -113,7 +118,8 @@ keyring at all** — leave `WSA_KEYRING_BASE_URL` empty and everything works.
 
 A user token lives minutes; a twenty-URL scrape can outlast one. So a background
 job resolves its credential **at submit time**, while your token is fresh, and
-carries the resolved headers rather than the token. Submitting without a usable
+carries the resolved LLM headers. Serper resolves its own credential per query;
+a long-running search batch still needs its caller token to remain valid. Submitting without a usable
 credential fails immediately rather than handing back a job id that cannot work.
 
 API-key credentials never expire, which covers every LLM provider here. An
@@ -126,8 +132,8 @@ Worth knowing before you depend on it:
 
 - **Keyring down means no cloud provider works.** There is no environment
   fallback; that was the point.
-- **Keyring v1 keeps accounts and sessions in memory.** A keyring restart
-  invalidates every session, and everyone must log in again to mint tokens.
+- **Keyring persists accounts and sessions in SQLite.** Restarting it preserves sessions;
+  signed service tokens remain usable until their own expiry.
 - **Building a catalogue costs one keyring call per provider.** Keyring's
   internal API has no "list this user's connections" endpoint, so availability
   is discovered by asking. Answers are cached per `(account, profile)` — keyed
@@ -146,3 +152,16 @@ Worth knowing before you depend on it:
 | Provider shows `not_configured` with a token present | That account has not connected it. `scripts/provision_keyring.py --check`. |
 | Provider connected but returns 401 upstream | The key is stored with the wrong header. Re-run the provisioning script, which sets it correctly. |
 | `404` on a model you have a key for | Wrong profile. Check `X-Keyring-Profile`. |
+
+## Shared verification and configuration changes
+
+Token verification uses `keyring-client` from the sibling `Keyring-api/clients/python`
+checkout. Install the family together while the client is unreleased. Keys are fetched
+lazily, refreshes are rate limited, and cached keys survive a bounded outage. A failed
+verification exposes one refusal message; HTTP exceptions and JWT diagnostics stay out
+of responses.
+
+`WSA_ENABLED_PROVIDERS` and `WSA_MAX_CONCURRENCY_PER_HOST` were never implemented and
+are now rejected at startup. Provider URLs belong in `WSA_PROVIDER_BASE_URLS` (a JSON
+mapping), including local runtimes. `.env.example` is tested through the real settings
+loader. Serper is bound to each request's verified caller before availability is checked.

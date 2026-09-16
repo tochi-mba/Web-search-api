@@ -37,6 +37,14 @@ async def test_uses_the_first_configured_backend():
     assert secondary.calls == 0
 
 
+async def test_preferred_backend_can_be_overridden_per_call():
+    google = StubBackend("google", results=result())
+    serper = StubBackend("serper", results=result())
+    router = SearchRouter([google, serper], preferred="google")
+    assert (await router.search(QUERY, preferred="serper")).backend == "serper"
+    assert google.calls == 0
+
+
 async def test_preferred_backend_is_tried_first():
     google = StubBackend("google", results=result())
     serper = StubBackend("serper", results=result())

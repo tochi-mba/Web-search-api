@@ -107,6 +107,22 @@ Background work is bounded by its own semaphore, separate from the request
 concurrency limit, so a queue of jobs cannot starve synchronous callers or
 exhaust the shared browser.
 
+### Per-person settings ship dark
+
+`WSA_SETTINGS_API_BASE_URL` empty (the default) keeps today's behaviour: every
+person on the box shares the deployment knobs. Set it, with
+`WSA_SETTINGS_API_TOKEN`, and each request reads that person's `search`
+settings from settings-api. The client is constructed at startup and makes no
+network call until the first resolve, so an unreachable settings-api cannot
+stop this service from coming up.
+
+A person may lower `max_content_chars` and add to `disabled_providers`; they
+cannot raise the ceiling or re-enable a provider the operator turned off. Job
+retention is computed when a job is submitted and stored on that job, because
+the reaper has no user token. `disabled_providers` is refused during an outage
+rather than falling back to "everything allowed" -- listing models or talking
+to one fails with 503; a scrape that never summarises still runs.
+
 ## Request lifecycle resources
 
 One `httpx.AsyncClient` and one browser process are shared across all requests

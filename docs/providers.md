@@ -8,12 +8,14 @@ Most vendors speak OpenAI's wire format. Adding one is **a single row** in
 `app/services/llm/specs.py`:
 
 ```python
-_spec("acme", "Acme AI", "https://api.acme.ai/v1", api_key_env="ACME_API_KEY"),
+(_spec("acme", "Acme AI", "https://api.acme.ai/v1"),)
 ```
 
-Then add the variable to `.env.example`. That is the entire change — the
-parametrised sweep in `tests/unit/test_openai_compatible.py` picks up the new
-row automatically and fails if it is malformed.
+That is the entire change. The credential is not configured here and not held by
+this service at all: `key` doubles as the service name the caller's credential is
+stored under in keyring, resolved per request for whoever is asking. The
+parametrised sweep in `tests/unit/test_openai_compatible.py` picks up the new row
+automatically and fails if it is malformed.
 
 ### Spec fields
 
@@ -52,7 +54,7 @@ Four APIs differ enough to warrant their own module:
 | **Local** | Ollama, LM Studio, vLLM, llama.cpp / llamafile, LocalAI, Xinference, Jan, text-generation-webui, KoboldCpp, Docker Model Runner |
 
 Local runtimes need no credential — only a reachable base URL, overridable per
-provider (`LMSTUDIO_BASE_URL`, `VLLM_BASE_URL`, `OLLAMA_BASE_URL`, …).
+provider in `WSA_PROVIDER_BASE_URLS`, for example `{"ollama":"http://localhost:11434"}`.
 
 ## Availability
 

@@ -73,7 +73,7 @@ class OllamaProvider:
         """Ollama needs no credential, only a base URL."""
         return bool(self._base_url)
 
-    async def list_models(self, auth: ResolvedAuth = NO_AUTH) -> list[ModelInfo]:
+    async def list_models(self, auth: ResolvedAuth = NO_AUTH) -> list[ModelInfo]:  # noqa: ARG002
         """List the models the daemon has pulled locally.
 
         ``auth`` is accepted to satisfy the protocol and ignored: a local daemon

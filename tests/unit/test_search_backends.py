@@ -202,6 +202,13 @@ async def test_serper_without_a_caller_is_not_configured(client):
     assert await SerperSearchBackend(client).is_configured() is False
 
 
+async def test_serper_without_a_profile_is_skipped_rather_than_guessed(client, vault):
+    keyring = KeyringClient(client, base_url=BASE_URL, service_token="svc")
+    caller = Caller(account_id="acct-1", profile=None, user_token=vault.token())
+    backend = SerperSearchBackend(client, keyring=keyring, caller=caller)
+    assert await backend.is_configured() is False
+
+
 @respx.mock
 async def test_for_caller_rebinds_the_credential(client, vault):
     """Two people using the same deployment use their own Serper accounts."""

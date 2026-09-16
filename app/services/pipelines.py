@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
-from app.api.mapping import to_summary_out
 from app.core.concurrency import bounded_gather
 from app.core.errors import DomainError
 from app.core.logging import get_logger
@@ -37,6 +36,7 @@ from app.services.fetch.page import FetchedPage, PageFetcher
 from app.services.keyring.caller import Caller
 from app.services.keyring.client import ResolvedAuth
 from app.services.llm.summarizer import Summarizer
+from app.services.preferences import Preferences
 from app.services.search.base import SearchQuery
 from app.services.search.router import SearchRouter
 
@@ -57,6 +57,7 @@ async def run_search(
     concurrency: int,
     caller: Caller | None = None,
     auth: ResolvedAuth | None = None,
+    preferences: Preferences | None = None,
 ) -> SearchResponse:
     """Run a batch of search queries and optionally summarise what comes back.
 
@@ -67,7 +68,10 @@ async def run_search(
     One failing query never fails the batch: each result carries its own status.
     """
     outcomes = await bounded_gather(
-        [_make_query_runner(search_router, query, request) for query in request.queries],
+        [
+            _make_query_runner(search_router, query, request, caller, preferences)
+            for query in request.queries
+        ],
         limit=concurrency,
     )
 
@@ -90,7 +94,7 @@ async def run_search(
     if request.summarize:
         for result in results:
             if result.status is ItemStatus.OK and result.results:
-                await _attach_summary(result, request, summarizer, caller, auth)
+                await _attach_summary(result, request, summarizer, caller, auth, preferences)
 
     return SearchResponse(results=results)
 
@@ -138,7 +142,11 @@ def _make_page_fetch(fetcher: PageFetcher, url: str) -> Callable[[], Awaitable[s
 
 
 def _make_query_runner(
-    search_router: SearchRouter, query: SearchQueryIn, request: SearchRequest
+    search_router: SearchRouter,
+    query: SearchQueryIn,
+    request: SearchRequest,
+    caller: Caller | None,
+    preferences: Preferences | None,
 ) -> Callable[[], Awaitable[SearchQueryResult | DomainError]]:
     """Build a coroutine factory running one query without raising."""
 
@@ -152,7 +160,9 @@ def _make_query_runner(
                     language=request.language,
                     region=request.region,
                     safe_search=request.safe_search,
-                )
+                ),
+                caller=caller,
+                preferred=preferences.search_backend if preferences is not None else None,
             )
         except DomainError as exc:
             logger.info("search.query_failed", query=query.query, code=exc.code)
@@ -179,6 +189,7 @@ async def _attach_summary(
     summarizer: Summarizer,
     caller: Caller | None,
     auth: ResolvedAuth | None,
+    preferences: Preferences | None,
 ) -> None:
     """Summarise one query's results in place."""
     query_in = next((q for q in request.queries if q.query == result.query), None)
@@ -196,8 +207,9 @@ async def _attach_summary(
         sources=[item.url for item in result.results],
         caller=caller,
         auth=auth,
+        preferences=preferences,
     )
-    result.summary = to_summary_out(summary)
+    result.summary = summary.as_out()
 
 
 # --------------------------------------------------------------------------- #
@@ -213,6 +225,7 @@ async def run_scrape(
     concurrency: int,
     caller: Caller | None = None,
     auth: ResolvedAuth | None = None,
+    preferences: Preferences | None = None,
 ) -> ScrapeResponse:
     """Fetch each URL, extract its readable content and optionally summarise.
 
@@ -268,8 +281,9 @@ async def run_scrape(
             sources=[r.url for r in successful],
             caller=caller,
             auth=auth,
+            preferences=preferences,
         )
-        return ScrapeResponse(results=results, summary=to_summary_out(summary))
+        return ScrapeResponse(results=results, summary=summary.as_out())
 
     for result in successful:
         assert result.page is not None  # noqa: S101 - filtered above
@@ -281,8 +295,9 @@ async def run_scrape(
             sources=[result.url],
             caller=caller,
             auth=auth,
+            preferences=preferences,
         )
-        result.summary = to_summary_out(summary)
+        result.summary = summary.as_out()
 
     return ScrapeResponse(results=results)
 
@@ -313,6 +328,7 @@ async def run_summarize(
     summarizer: Summarizer,
     caller: Caller | None = None,
     auth: ResolvedAuth | None = None,
+    preferences: Preferences | None = None,
 ) -> SummarizeResponse:
     """Summarise text the caller already has."""
     summary = await summarizer.summarize(
@@ -323,5 +339,6 @@ async def run_summarize(
         sources=list(request.sources) or None,
         caller=caller,
         auth=auth,
+        preferences=preferences,
     )
-    return SummarizeResponse(summary=to_summary_out(summary))
+    return SummarizeResponse(summary=summary.as_out())

@@ -48,10 +48,14 @@ def response_id(response):
 
 async def test_ready_is_degraded_without_dependencies(client):
     response = await client.get("/health/ready")
-    assert response.status_code == 200
+    assert response.status_code == 503
     body = response.json()
     assert body["ready"] is False
     assert body["status"] == "degraded"
+
+
+async def test_canonical_ready_is_degraded_without_dependencies(client):
+    assert (await client.get("/ready")).status_code == 503
 
 
 async def test_ready_is_ok_when_every_component_is_ready(app, client):

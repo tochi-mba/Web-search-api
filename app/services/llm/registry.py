@@ -14,7 +14,8 @@ caller supplies.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+import hashlib
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 
 from app.core.cache import TTLCache
@@ -22,6 +23,7 @@ from app.core.concurrency import bounded_gather
 from app.core.errors import (
     DomainError,
     NotFoundError,
+    PreferencesUnavailableError,
     ProviderUnavailableError,
     RateLimitedError,
     ValidationProblem,
@@ -37,6 +39,7 @@ from app.services.llm.base import (
     ProviderHealth,
     ProviderStatus,
 )
+from app.services.preferences import PROFILE_UNKNOWN
 
 logger = get_logger(__name__)
 
@@ -51,6 +54,20 @@ class ModelCatalog:
     def find(self, model_id: str) -> ModelInfo | None:
         """Look up one model by its namespaced id."""
         return next((m for m in self.models if m.id == model_id), None)
+
+
+def _disabled_cache_token(disabled: Iterable[str]) -> str:
+    """Stable cache fragment for a disabled-provider filter.
+
+    Catalogues that differ only in who is filtered out must not share a probe
+    result: serving Alice's filtered list to Bob would show her restrictions
+    (or worse, hide his). The hash keeps the key short; the sorted join makes
+    order irrelevant.
+    """
+    names = sorted(disabled)
+    if not names:
+        return ""
+    return hashlib.sha256(",".join(names).encode("utf-8")).hexdigest()
 
 
 def split_model_id(model_id: str) -> tuple[str, str]:
@@ -76,7 +93,7 @@ class ModelRegistry:
 
     def __init__(
         self,
-        providers: list[LLMProvider],
+        providers: Sequence[LLMProvider],
         *,
         default_model: str,
         cache_ttl_seconds: float,
@@ -105,14 +122,17 @@ class ModelRegistry:
         self._max_concurrency = max_concurrency
         self._cache_ttl = cache_ttl_seconds
         self._max_cached_callers = max_cached_callers
-        self._caches: dict[tuple[str, str], TTLCache[ModelCatalog]] = {}
+        self._caches: dict[tuple[str, str, str], TTLCache[ModelCatalog]] = {}
 
     #: Cache key used when there is no caller: only keyless providers are visible.
     _ANONYMOUS = ("", "")
 
-    def _cache_for(self, caller: Caller | None) -> TTLCache[ModelCatalog]:
-        """Return this caller's catalogue cache, creating it if needed."""
-        key = caller.cache_key if caller is not None else self._ANONYMOUS
+    def _cache_for(
+        self, caller: Caller | None, disabled_providers: Iterable[str]
+    ) -> TTLCache[ModelCatalog]:
+        """Return this caller's catalogue cache for this filter, creating it if needed."""
+        identity = caller.cache_key if caller is not None else self._ANONYMOUS
+        key = (*identity, _disabled_cache_token(disabled_providers))
         cache = self._caches.get(key)
         if cache is None:
             if len(self._caches) >= self._max_cached_callers:
@@ -133,20 +153,32 @@ class ModelRegistry:
         """Keys of every registered provider."""
         return list(self._providers)
 
-    async def catalog(self, caller: Caller | None = None, *, refresh: bool = False) -> ModelCatalog:
-        """Return the catalogue for one caller, probing providers when stale."""
-        cache = self._cache_for(caller)
+    async def catalog(
+        self,
+        caller: Caller | None = None,
+        *,
+        refresh: bool = False,
+        disabled_providers: Iterable[str] = (),
+    ) -> ModelCatalog:
+        """Return the catalogue for one caller, probing providers when stale.
+
+        ``disabled_providers`` are omitted before probing so a person who asked
+        never to send queries to a provider does not even get a list_models call
+        made against it.
+        """
+        disabled = frozenset(disabled_providers)
+        cache = self._cache_for(caller, disabled)
         if refresh:
             cache.invalidate()
 
         async def probe() -> ModelCatalog:
-            return await self._probe_all(caller)
+            return await self._probe_all(caller, disabled)
 
         return await cache.get(probe)
 
-    async def _probe_all(self, caller: Caller | None) -> ModelCatalog:
-        """Probe every provider concurrently and assemble the catalogue."""
-        names = list(self._providers)
+    async def _probe_all(self, caller: Caller | None, disabled: frozenset[str]) -> ModelCatalog:
+        """Probe every provider that is still allowed, concurrently."""
+        names = [name for name in self._providers if name not in disabled]
         results = await bounded_gather(
             [self._make_probe(name, caller) for name in names],
             limit=self._max_concurrency,
@@ -188,10 +220,15 @@ class ModelRegistry:
         """
         if not provider.requires_credential:
             return NO_AUTH
-        if self._keyring is None or not self._keyring.is_configured or caller is None:
+        if caller is None:
+            raise NotConnectedError(provider.name)
+        profile = caller.profile
+        if profile is None:
+            raise PreferencesUnavailableError(PROFILE_UNKNOWN)
+        if self._keyring is None or not self._keyring.is_configured:
             raise NotConnectedError(provider.name)
         return await self._keyring.resolve(
-            profile=caller.profile, service=provider.name, user_token=caller.user_token
+            profile=profile, service=provider.name, user_token=caller.user_token
         )
 
     async def _probe_one(
@@ -216,6 +253,17 @@ class ModelRegistry:
             # The common case across fifty providers: this account simply has
             # not connected this one. Short-circuits without touching the
             # provider, which is what keeps a full sweep cheap.
+            return (
+                ProviderHealth(
+                    name=name,
+                    status=ProviderStatus.NOT_CONFIGURED,
+                    detail="No credential for this caller in keyring.",
+                ),
+                [],
+            )
+        except PreferencesUnavailableError:
+            # Listing models does not need a profile; using a credentialed
+            # model does, and that path raises from resolve/complete instead.
             return (
                 ProviderHealth(
                     name=name,
@@ -276,12 +324,21 @@ class ModelRegistry:
             models,
         )
 
-    async def resolve(self, model_id: str | None, caller: Caller | None = None) -> ModelInfo:
+    async def resolve(
+        self,
+        model_id: str | None,
+        caller: Caller | None = None,
+        *,
+        disabled_providers: Iterable[str] = (),
+        default_model: str | None = None,
+    ) -> ModelInfo:
         """Resolve a requested model id to something actually available.
 
         Args:
             model_id: A namespaced id, or ``None`` to use the default.
             caller: Who the request is for; decides which models are available.
+            disabled_providers: Providers this person's queries must never reach.
+            default_model: Per-person default, or ``None`` for the deployment's.
 
         Returns:
             The resolved model.
@@ -289,8 +346,10 @@ class ModelRegistry:
         Raises:
             NotFoundError: The named model is not currently available.
             ProviderUnavailableError: Nothing at all is available.
+            PreferencesUnavailableError: A credentialed model was chosen and the
+                profile it would be resolved with is unknown.
         """
-        catalog = await self.catalog(caller)
+        catalog = await self.catalog(caller, disabled_providers=disabled_providers)
 
         if not catalog.models:
             raise ProviderUnavailableError(
@@ -302,8 +361,10 @@ class ModelRegistry:
                 ),
             )
 
-        requested = model_id or self._default_model
-        split_model_id(requested)
+        configured_default = default_model or self._default_model
+        requested = model_id or configured_default
+        provider_name, _model = split_model_id(requested)
+        self._require_profile_for_provider(provider_name, caller)
 
         found = catalog.find(requested)
         if found is not None:
@@ -320,15 +381,32 @@ class ModelRegistry:
         fallback = catalog.models[0]
         logger.warning(
             "models.default_unavailable",
-            configured=self._default_model,
+            configured=configured_default,
             fallback=fallback.id,
         )
         return fallback
 
+    def _require_profile_for_provider(self, provider_name: str, caller: Caller | None) -> None:
+        """Fail closed when a credentialed model would guess a profile."""
+        provider = self._providers.get(provider_name)
+        if (
+            provider is not None
+            and provider.requires_credential
+            and caller is not None
+            and caller.profile is None
+        ):
+            raise PreferencesUnavailableError(PROFILE_UNKNOWN)
+
     def provider_for(self, model: ModelInfo) -> LLMProvider:
-        """Return the provider serving ``model``."""
+        """Return the provider serving ``model``.
+
+        Raises:
+            NotFoundError: Nothing is registered under ``model.provider``.
+                Catalogue entries always map back, so this means a
+                :class:`ModelInfo` that came from somewhere else.
+        """
         provider = self._providers.get(model.provider)
-        if provider is None:  # pragma: no cover - catalogue entries always map back
+        if provider is None:
             raise NotFoundError(
                 "Unknown provider", detail=f"No provider registered for '{model.provider}'."
             )
@@ -341,6 +419,8 @@ class ModelRegistry:
         model_id: str | None = None,
         caller: Caller | None = None,
         auth: ResolvedAuth | None = None,
+        disabled_providers: Iterable[str] = (),
+        default_model: str | None = None,
     ) -> ChatResponse:
         """Resolve a model and run one completion against its provider.
 
@@ -352,8 +432,15 @@ class ModelRegistry:
             auth: A credential resolved earlier - background jobs resolve at
                 submit time, while the caller's token is still fresh, and carry
                 the result rather than the token.
+            disabled_providers: Providers this person's queries must never reach.
+            default_model: Per-person default, or ``None`` for the deployment's.
         """
-        model = await self.resolve(model_id, caller)
+        model = await self.resolve(
+            model_id,
+            caller,
+            disabled_providers=disabled_providers,
+            default_model=default_model,
+        )
         provider = self.provider_for(model)
 
         if auth is None:

@@ -105,6 +105,19 @@ async def test_every_endpoint_supports_background_mode(client, path, body):
     assert response.json()["poll_url"].startswith("/v1/jobs/")
 
 
+async def test_background_without_a_summary_does_not_resolve_a_model(client, seeded_pages):
+    scrape = await client.post(
+        "/v1/scrape",
+        json={"urls": ["https://a.example.com/1"], "summarize": False, "async": True},
+    )
+    search = await client.post(
+        "/v1/search",
+        json={"queries": [{"query": "x"}], "summarize": False, "async": True},
+    )
+    assert scrape.status_code == 202
+    assert search.status_code == 202
+
+
 async def test_omitting_the_flag_still_runs_synchronously(client, seeded_pages):
     response = await client.post("/v1/scrape", json=SCRAPE_BODY)
     assert response.status_code == 200

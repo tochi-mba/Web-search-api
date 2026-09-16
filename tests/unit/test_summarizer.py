@@ -3,7 +3,7 @@ import pytest
 from app.services.keyring.client import NO_AUTH
 from app.services.llm.base import ChatResponse, ModelInfo
 from app.services.llm.registry import ModelRegistry
-from app.services.llm.summarizer import Summarizer
+from app.services.llm.summarizer import Summarizer, Summary
 
 SUMMARY_JSON = '{"executive_summary": "Latency rose 40%.", "key_points": ["queues", "sharding"]}'
 
@@ -207,3 +207,10 @@ async def test_empty_model_response_yields_an_empty_summary():
     provider = RecordingProvider(response_text="")
     summary = await build(provider).summarize("Content.")
     assert summary.executive_summary == ""
+
+
+def test_the_mapper_delegates_to_the_summary():
+    from app.api.mapping import to_summary_out
+
+    summary = Summary(executive_summary="Latency rose 40%.", key_points=["queues"])
+    assert to_summary_out(summary) == summary.as_out()

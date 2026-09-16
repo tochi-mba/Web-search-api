@@ -36,7 +36,9 @@ documents with content type `application/problem+json`:
 Liveness. Does no I/O, so a slow dependency never triggers a restart.
 Also available at `/healthy`.
 
-## `GET /health/ready`
+## `GET /ready` (alias: `/health/ready`)
+
+Returns HTTP 503 when any dependency is degraded and 200 when ready.
 
 Readiness. `ready` is true only when a browser is available **and** at least one
 LLM provider is reachable. Returns 200 either way; read the body.
@@ -45,7 +47,7 @@ LLM provider is reachable. Returns 200 either way; read the body.
 
 Query parameter `refresh=true` re-probes instead of using the cached catalogue.
 
-**Per caller.** Send `X-Keyring-User-Token` to see the providers that account has
+**Per caller.** Send `Authorization: Bearer <token>` to see the providers that account has
 connected; without it only credential-free runtimes appear. Catalogues are cached
 per `(account, profile)`.
 
@@ -196,7 +198,7 @@ capability layer had to drop, rename or translate for the chosen model.
 
 | Header | Required | Meaning |
 |---|---|---|
-| `X-Keyring-User-Token` | for any credentialed provider | Who the request is for. Verified locally against keyring's published keys. |
+| `Authorization: Bearer <token>` | for any credentialed provider | Who the request is for. Verified locally against keyring's published keys. |
 | `X-Keyring-Profile` | no | Which credential set to draw from. Defaults to `WSA_KEYRING_DEFAULT_PROFILE`. |
 
 Every response that depends on credentials — the model catalogue, any

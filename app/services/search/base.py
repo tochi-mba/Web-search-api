@@ -12,6 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
+from app.services.keyring.caller import Caller
+
 
 @dataclass(frozen=True, slots=True)
 class SearchResult:
@@ -72,4 +74,13 @@ class SearchBackend(Protocol):
         Raises:
             SearchBlockedError: The engine refused to serve results.
         """
+        ...
+
+
+@runtime_checkable
+class CallerSearchBackend(Protocol):
+    """A backend whose credentials must be bound separately for each request."""
+
+    def for_caller(self, caller: Caller | None) -> SearchBackend:
+        """Return a request-local backend without modifying the shared instance."""
         ...

@@ -26,6 +26,7 @@ def test_detail_defaults_to_title():
         (errors.UpstreamError, 502, "upstream_error"),
         (errors.SearchBlockedError, 502, "search_blocked_error"),
         (errors.ProviderUnavailableError, 503, "provider_unavailable_error"),
+        (errors.PreferencesUnavailableError, 503, "preferences_unavailable_error"),
         (errors.TimeoutProblem, 504, "timeout_problem"),
     ],
 )

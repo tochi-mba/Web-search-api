@@ -254,7 +254,7 @@ OPENAI_COMPATIBLE_SPECS: tuple[ProviderSpec, ...] = (
     _spec(
         "vllm",
         "vLLM",
-        "http://localhost:8000/v1",
+        "http://localhost:8006/v1",
         kind=L,
         auth=AuthStyle.NONE,
         base_url_env="VLLM_BASE_URL",

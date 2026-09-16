@@ -74,6 +74,12 @@ async def test_kind_is_preserved(runner):
     assert (await runner.get(job.id)).kind == "search"
 
 
+async def test_submit_carries_the_jobs_own_retention(runner):
+    job = await runner.submit("scrape", immediate({}), retention_seconds=12.0)
+    await drain(runner)
+    assert (await runner.get(job.id)).retention_seconds == 12.0
+
+
 async def test_status_moves_through_running(runner):
     gate = asyncio.Event()
 

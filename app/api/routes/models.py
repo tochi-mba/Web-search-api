@@ -16,6 +16,7 @@ from app.schemas.models import (
 from app.services.keyring.caller import Caller
 from app.services.llm.capabilities import resolve_capabilities
 from app.services.llm.registry import ModelRegistry
+from app.services.preferences import Preferences
 
 router = APIRouter(prefix="/v1", tags=["models"])
 
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/v1", tags=["models"])
 async def list_models(
     registry: Annotated[ModelRegistry, Depends(deps.get_registry)],
     caller: Annotated[Caller | None, Depends(deps.get_caller)],
+    preferences: Annotated[Preferences, Depends(deps.get_preferences)],
     refresh: Annotated[
         bool, Query(description="Re-probe providers instead of using the cache.")
     ] = False,
@@ -38,7 +40,9 @@ async def list_models(
     reported with their status but contribute no models - so anything listed
     here can actually be used.
     """
-    catalog = await registry.catalog(caller, refresh=refresh)
+    catalog = await registry.catalog(
+        caller, refresh=refresh, disabled_providers=preferences.require_disabled_providers()
+    )
 
     models = []
     for model in catalog.models:
@@ -66,7 +70,7 @@ async def list_models(
         )
 
     return ModelsResponse(
-        default_model=registry.default_model,
+        default_model=preferences.default_model,
         models=models,
         providers=[
             ProviderOut(

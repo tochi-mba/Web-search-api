@@ -7,6 +7,7 @@ from the catalogue instead of blowing up when someone tries to use it.
 
 import asyncio
 
+import httpx
 import pytest
 
 from app.core.errors import (
@@ -264,6 +265,13 @@ async def test_complete_preserves_request_parameters():
     assert sent.json_mode is True
 
 
+def test_a_model_naming_an_unregistered_provider_is_not_found():
+    """Catalogue entries always map back, so this is a ModelInfo from elsewhere."""
+    reg = registry(StubProvider("a", models=["m"]))
+    with pytest.raises(NotFoundError, match="Unknown provider"):
+        reg.provider_for(ModelInfo.build("ghost", "m"))
+
+
 def test_provider_names_are_exposed():
     assert set(registry(StubProvider("a"), StubProvider("b")).provider_names) == {"a", "b"}
 
@@ -276,3 +284,89 @@ async def test_catalog_find_returns_none_for_unknown_ids():
     catalog = await registry(StubProvider("a", models=["m"])).catalog()
     assert catalog.find("nope:nope") is None
     assert catalog.find("a:m") is not None
+
+
+async def test_disabled_providers_are_omitted_before_they_are_probed():
+    allowed = CountingProvider("keep", models=["m"])
+    blocked = CountingProvider("drop", models=["secret"])
+    catalog = await registry(allowed, blocked).catalog(disabled_providers=["drop"])
+    assert [m.id for m in catalog.models] == ["keep:m"]
+    assert [p.name for p in catalog.providers] == ["keep"]
+    assert blocked.probe_count == 0
+    assert allowed.probe_count == 1
+
+
+async def test_different_disabled_lists_do_not_share_a_catalogue_cache():
+    provider = CountingProvider("keep", models=["m"])
+    other = CountingProvider("drop", models=["x"])
+    reg = registry(provider, other)
+    first = await reg.catalog(disabled_providers=["drop"])
+    second = await reg.catalog(disabled_providers=[])
+    assert [p.name for p in first.providers] == ["keep"]
+    assert {p.name for p in second.providers} == {"keep", "drop"}
+    assert other.probe_count == 1
+
+
+async def test_a_person_default_model_is_used_when_none_is_requested():
+    reg = registry(StubProvider("a", models=["theirs"]), default_model="a:deployment")
+    assert (await reg.resolve(None, default_model="a:theirs")).id == "a:theirs"
+
+
+async def test_a_credentialed_model_without_a_profile_is_not_guessed():
+    from app.core.errors import PreferencesUnavailableError
+    from app.services.keyring.caller import Caller
+
+    class Credentialed(StubProvider):
+        requires_credential = True
+
+    caller = Caller(account_id="acct", profile=None, user_token="token")
+    local = StubProvider("ollama", models=["local"])
+    provider = Credentialed("anthropic", models=["m"])
+    reg = registry(local, provider, default_model="ollama:local")
+
+    catalog = await reg.catalog(caller)
+    assert [m.id for m in catalog.models] == ["ollama:local"]
+    statuses = {p.name: p.status for p in catalog.providers}
+    assert statuses["anthropic"] is ProviderStatus.NOT_CONFIGURED
+
+    with pytest.raises(PreferencesUnavailableError):
+        await reg.resolve("anthropic:m", caller)
+
+
+async def test_a_credentialed_provider_without_a_caller_is_not_connected():
+    class Credentialed(StubProvider):
+        requires_credential = True
+
+    catalog = await registry(Credentialed("anthropic", models=["m"])).catalog()
+    assert catalog.models == []
+    assert catalog.providers[0].status is ProviderStatus.NOT_CONFIGURED
+
+
+async def test_without_keyring_a_named_profile_cannot_use_a_credentialed_provider():
+    from app.services.keyring.caller import Caller
+
+    class Credentialed(StubProvider):
+        requires_credential = True
+
+    caller = Caller(account_id="acct", profile="personal", user_token="token")
+    catalog = await registry(Credentialed("anthropic", models=["m"])).catalog(caller)
+    assert catalog.models == []
+    assert catalog.providers[0].status is ProviderStatus.NOT_CONFIGURED
+
+
+async def test_an_unconfigured_keyring_is_treated_as_absent():
+    # Present but not usable: empty URL, same as never having been wired.
+    from app.services.keyring.caller import Caller
+    from app.services.keyring.client import KeyringClient
+
+    class Credentialed(StubProvider):
+        requires_credential = True
+
+    caller = Caller(account_id="acct", profile="personal", user_token="token")
+    async with httpx.AsyncClient() as http:
+        keyring = KeyringClient(http, base_url="", service_token="svc")
+        catalog = await registry(Credentialed("anthropic", models=["m"]), keyring=keyring).catalog(
+            caller
+        )
+    assert catalog.models == []
+    assert catalog.providers[0].status is ProviderStatus.NOT_CONFIGURED
