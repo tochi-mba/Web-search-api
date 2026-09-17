@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 T = TypeVar("T")
 
 
-async def bounded_gather(
+async def bounded_gather[T](
     factories: Iterable[Callable[[], Awaitable[T]]],
     *,
     limit: int,

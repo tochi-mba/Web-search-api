@@ -9,14 +9,14 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 T = TypeVar("T")
 
 Clock = Callable[[], float]
 
 
-class TTLCache(Generic[T]):
+class TTLCache[T]:
     """Single-value cache that recomputes once its entry goes stale.
 
     Concurrent callers arriving during a refresh wait for the in-flight refresh

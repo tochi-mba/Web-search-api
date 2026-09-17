@@ -3,7 +3,7 @@ name = "web-search-api"
 version = "0.1.0"
 description = "FastAPI service that scrapes Google search results and web pages, then synthesises executive summaries with any of ~60 LLM providers."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "MIT" }
 
 dependencies = [
@@ -47,7 +47,7 @@ packages = ["app"]
 # --------------------------------------------------------------------------- #
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 src = ["app", "tests"]
 
 [tool.ruff.lint]
@@ -141,7 +141,7 @@ convention = "google"
 # Types
 # --------------------------------------------------------------------------- #
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 files = ["app", "tests"]
 strict = true
 warn_unreachable = true

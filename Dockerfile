@@ -12,7 +12,7 @@ ENV PYTHONUNBUFFERED=1 \
     # The base image's Python is older than this service needs, so uv downloads one. Put it
     # somewhere pwuser can read: the default is /root/.local, which is closed to everyone else.
     UV_PYTHON_INSTALL_DIR=/opt/uv/python \
-    UV_PYTHON=3.11
+    UV_PYTHON=3.12
 
 WORKDIR /app
 

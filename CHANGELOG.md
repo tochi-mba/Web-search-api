@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** the floor is now **Python 3.12** (CI runs 3.12 and 3.13).
+  `.python-version`, `requires-python`, ruff's `target-version`, mypy's `python_version`,
+  the Docker base image and the pre-commit interpreter all moved together, and `uv.lock`
+  was regenerated. The family-wide reason is in the meta-repo's
+  [ADR-0008](https://github.com/tochi-mba/LUCY-assistant/blob/main/docs/adr/0008-python-3-12-floor.md):
+  `weftai`, which the assistant hub depends on, requires 3.12 and uses PEP 695 type
+  parameters that do not parse on 3.11. Generics here moved to PEP 695 syntax with it.
 ### Added
 
 - Optional per-person settings from settings-api (namespace `search`), off by
