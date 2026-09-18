@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -82,7 +82,7 @@ async def unhandled_error_handler(request: Request, _exc: Exception) -> JSONResp
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Start and stop long-lived resources shared by all requests."""
     settings: Settings = app.state.settings
     logger.info("service.starting", service=settings.service_name, version=__version__)
