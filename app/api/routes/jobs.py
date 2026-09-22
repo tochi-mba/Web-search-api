@@ -16,6 +16,7 @@ router = APIRouter(prefix="/v1", tags=["jobs"])
 
 #: Suggested seconds between polls while a job is still running.
 POLL_INTERVAL_SECONDS = 2
+MAX_WAIT_SECONDS = 60.0
 
 
 @router.get("/jobs", response_model=JobListResponse, summary="List recent jobs")
@@ -34,13 +35,28 @@ async def get_job(
     job_id: str,
     response: Response,
     runner: Annotated[JobRunner, Depends(deps.get_job_runner)],
+    wait_seconds: Annotated[
+        float,
+        Query(
+            ge=0,
+            le=MAX_WAIT_SECONDS,
+            description=(
+                "Seconds to wait for the job to finish before answering. 0 (the "
+                "default) answers straight away."
+            ),
+        ),
+    ] = 0.0,
 ) -> JobOut:
     """Return one job's state, including its result once it has finished.
 
     While the job is still running a ``Retry-After`` header suggests how long to
-    wait before polling again, so callers need not invent a backoff.
+    wait before polling again, so callers need not invent a backoff. Pass
+    ``wait_seconds`` to hold the request open until the job finishes instead.
     """
-    job = await runner.get(job_id)
+    if wait_seconds > 0:
+        job = await runner.wait_for_terminal(job_id, timeout=wait_seconds)
+    else:
+        job = await runner.get(job_id)
     if not job.status.is_terminal:
         response.headers["Retry-After"] = str(POLL_INTERVAL_SECONDS)
     return to_job_out(job)

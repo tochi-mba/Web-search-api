@@ -96,3 +96,16 @@ class JobStore(Protocol):
     async def delete(self, job_id: str) -> bool:
         """Remove a job. Returns whether it existed."""
         ...
+
+    async def wait_for_terminal(
+        self,
+        job_id: str,
+        *,
+        timeout: float,  # noqa: ASYNC109
+    ) -> Job | None:
+        """Return the job once it is terminal, or as it stands when ``timeout`` elapses.
+
+        ``None`` if the job is unknown or expired. Elapsing is a normal outcome, not an
+        error.
+        """
+        ...

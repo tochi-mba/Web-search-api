@@ -44,6 +44,7 @@ class InMemoryJobStore:
         self._max_jobs = max_jobs
         self._clock = clock
         self._jobs: dict[str, Job] = {}
+        self._settled: dict[str, asyncio.Event] = {}
         self._lock = asyncio.Lock()
 
     async def put(self, job: Job) -> None:
@@ -51,6 +52,9 @@ class InMemoryJobStore:
         async with self._lock:
             self._purge_locked()
             self._jobs[job.id] = job
+            event = self._settled.setdefault(job.id, asyncio.Event())
+            if job.status.is_terminal:
+                event.set()
             self._evict_locked()
 
     async def get(self, job_id: str) -> Job | None:
@@ -70,7 +74,34 @@ class InMemoryJobStore:
     async def delete(self, job_id: str) -> bool:
         """Remove a job. Returns whether it existed."""
         async with self._lock:
-            return self._jobs.pop(job_id, None) is not None
+            existed = self._jobs.pop(job_id, None) is not None
+            self._release(job_id)
+            return existed
+
+    async def wait_for_terminal(
+        self,
+        job_id: str,
+        *,
+        timeout: float,  # noqa: ASYNC109
+    ) -> Job | None:
+        """Return the job once it is terminal, or as it stands when ``timeout`` elapses."""
+        async with self._lock:
+            self._purge_locked()
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None
+            event = self._settled.setdefault(job_id, asyncio.Event())
+            if job.status.is_terminal:
+                return job
+
+        if timeout > 0:
+            try:
+                async with asyncio.timeout(timeout):
+                    await event.wait()
+            except TimeoutError:
+                pass
+
+        return await self.get(job_id)
 
     def _expired(self, job: Job) -> bool:
         """Whether a finished job has outlived its retention window."""
@@ -87,6 +118,7 @@ class InMemoryJobStore:
         expired = [job_id for job_id, job in self._jobs.items() if self._expired(job)]
         for job_id in expired:
             del self._jobs[job_id]
+            self._release(job_id)
         if expired:
             logger.debug("jobs.purged", count=len(expired))
 
@@ -103,4 +135,10 @@ class InMemoryJobStore:
             if len(self._jobs) <= self._max_jobs:
                 break
             del self._jobs[job.id]
+            self._release(job.id)
             logger.debug("jobs.evicted", job_id=job.id)
+
+    def _release(self, job_id: str) -> None:
+        event = self._settled.pop(job_id, None)
+        if event is not None:
+            event.set()

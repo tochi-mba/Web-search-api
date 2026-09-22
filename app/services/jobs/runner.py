@@ -168,6 +168,22 @@ class JobRunner:
             )
         return job
 
+    async def wait_for_terminal(self, job_id: str, *, timeout: float) -> Job:  # noqa: ASYNC109
+        """Return the job once it is terminal, or as it stands when ``timeout`` elapses.
+
+        Raises:
+            NotFoundError: No such job, or it has already expired.
+        """
+        job = await self.get(job_id)
+        if job.status.is_terminal or timeout <= 0:
+            return job
+        waited = await self._store.wait_for_terminal(job_id, timeout=timeout)
+        if waited is None:
+            raise NotFoundError(
+                "Unknown job", detail=f"No job with id '{job_id}' - it may have expired."
+            )
+        return waited
+
     async def list(self, *, status: JobStatus | None = None, limit: int = 50) -> list[Job]:
         """Return recent jobs, newest first."""
         return await self._store.list(status=status, limit=limit)

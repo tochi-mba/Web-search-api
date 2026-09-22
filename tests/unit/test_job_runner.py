@@ -10,7 +10,7 @@ import gc
 import pytest
 
 from app.core.errors import NotFoundError, UpstreamError
-from app.services.jobs.base import JobStatus
+from app.services.jobs.base import Job, JobStatus
 from app.services.jobs.memory import InMemoryJobStore
 from app.services.jobs.runner import JobRunner
 
@@ -94,6 +94,52 @@ async def test_status_moves_through_running(runner):
     gate.set()
     await drain(runner)
     assert (await runner.get(job.id)).status is JobStatus.SUCCEEDED
+
+
+async def test_waiting_on_a_finished_job_returns_at_once(runner):
+    job = await runner.submit("scrape", immediate({}))
+    await drain(runner)
+    settled = await runner.wait_for_terminal(job.id, timeout=30)
+    assert settled.status is JobStatus.SUCCEEDED
+
+
+async def test_a_zero_wait_returns_the_job_as_it_stands(runner):
+    gate = asyncio.Event()
+
+    async def work():
+        await gate.wait()
+        return {}
+
+    job = await runner.submit("scrape", work)
+    await asyncio.sleep(0)
+    current = await runner.wait_for_terminal(job.id, timeout=0)
+    assert current.status is JobStatus.RUNNING
+    gate.set()
+    await drain(runner)
+
+
+async def test_waiting_returns_when_work_finishes(runner):
+    gate = asyncio.Event()
+
+    async def work():
+        await gate.wait()
+        return {"done": True}
+
+    job = await runner.submit("scrape", work)
+    waiter = asyncio.create_task(runner.wait_for_terminal(job.id, timeout=5))
+    await asyncio.sleep(0)
+    gate.set()
+    assert (await waiter).status is JobStatus.SUCCEEDED
+
+
+async def test_waiting_on_a_deleted_job_is_not_found(runner, store):
+    job = Job.create("scrape")
+    await store.put(job)
+    waiter = asyncio.create_task(runner.wait_for_terminal(job.id, timeout=5))
+    await asyncio.sleep(0)
+    await store.delete(job.id)
+    with pytest.raises(NotFoundError):
+        await waiter
 
 
 # --- the task-reference trap ----------------------------------------------- #

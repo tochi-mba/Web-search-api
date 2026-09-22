@@ -239,3 +239,48 @@ async def test_concurrent_writes_do_not_lose_jobs(store):
     jobs = [Job.create(f"k{i}") for i in range(5)]
     await asyncio.gather(*(store.put(j) for j in jobs))
     assert len(await store.list()) == 5
+
+
+async def test_a_job_that_is_already_finished_returns_at_once(store):
+    job = finished()
+    await store.put(job)
+    settled = await store.wait_for_terminal(job.id, timeout=30)
+    assert settled is not None
+    assert settled.status is JobStatus.SUCCEEDED
+
+
+async def test_waiting_returns_as_soon_as_the_job_settles(store):
+    job = Job.create("scrape")
+    await store.put(job)
+
+    async def finish():
+        job.status = JobStatus.SUCCEEDED
+        job.finished_at = job.created_at
+        await store.put(job)
+
+    waiter = asyncio.create_task(store.wait_for_terminal(job.id, timeout=30))
+    await asyncio.sleep(0)
+    await finish()
+    settled = await waiter
+    assert settled is not None
+    assert settled.status is JobStatus.SUCCEEDED
+
+
+async def test_waiting_gives_up_and_returns_the_job_as_it_stands(store):
+    job = Job.create("scrape")
+    await store.put(job)
+    unsettled = await store.wait_for_terminal(job.id, timeout=0.01)
+    assert unsettled is not None
+    assert unsettled.status is JobStatus.QUEUED
+
+
+async def test_a_zero_timeout_does_not_wait(store):
+    job = Job.create("scrape")
+    await store.put(job)
+    current = await store.wait_for_terminal(job.id, timeout=0)
+    assert current is not None
+    assert current.status is JobStatus.QUEUED
+
+
+async def test_waiting_on_an_unknown_job_returns_none(store):
+    assert await store.wait_for_terminal("nope", timeout=1) is None

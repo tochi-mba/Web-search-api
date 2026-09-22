@@ -180,6 +180,29 @@ async def test_retry_after_is_sent_while_running(client, fake_pages):
     assert "retry-after" not in (await client.get(f"/v1/jobs/{job_id}")).headers
 
 
+async def test_wait_seconds_returns_when_the_job_finishes(client, fake_pages):
+    gate = asyncio.Event()
+    original = fake_pages.fetch
+
+    async def blocking(url, *, render="auto"):
+        await gate.wait()
+        return await original(url, render=render)
+
+    fake_pages.fetch = blocking
+    accepted = await client.post("/v1/scrape", json={**SCRAPE_BODY, "async": True})
+    job_id = accepted.json()["job_id"]
+    waiter = asyncio.create_task(client.get(f"/v1/jobs/{job_id}", params={"wait_seconds": 5}))
+    await asyncio.sleep(0)
+    gate.set()
+    body = (await waiter).json()
+    assert body["status"] == "succeeded"
+
+
+async def test_an_overlong_wait_is_refused(client):
+    response = await client.get("/v1/jobs/does-not-exist", params={"wait_seconds": 3600})
+    assert response.status_code == 422
+
+
 async def test_unknown_job_returns_a_problem_document(client):
     response = await client.get("/v1/jobs/does-not-exist")
     assert response.status_code == 404

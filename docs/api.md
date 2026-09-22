@@ -144,7 +144,8 @@ polling interval in seconds.
 ```
 
 `status` is `queued`, `running`, `succeeded`, `failed` or `cancelled`.
-`Retry-After` is sent while the job is not yet terminal.
+`Retry-After` is sent while the job is not yet terminal. Pass `wait_seconds`
+(0–60, default 0) to long-poll until the job finishes instead of looping.
 
 **`result` is byte-identical to what the synchronous endpoint would have
 returned** for that request, so a client can switch modes without changing how
