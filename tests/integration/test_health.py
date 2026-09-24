@@ -80,6 +80,7 @@ async def test_lifespan_builds_and_releases_every_service(settings):
     """The composition root must wire everything the routes depend on."""
     from app.main import create_app as _create_app
     from app.main import lifespan
+    from app.services.fetch.browser import browser_is_launchable
 
     application = _create_app(settings)
     async with lifespan(application):
@@ -87,6 +88,13 @@ async def test_lifespan_builds_and_releases_every_service(settings):
         assert application.state.summarizer is not None
         assert application.state.page_fetcher is not None
         assert application.state.search_router is not None
-        assert application.state.browser_available is True
+        # Whether a browser is really there, not whether headless mode is switched on. This
+        # asserted `is True` while the flag was `... or settings.browser_headless`, which
+        # defaults to true -- so it passed on a machine with no browser at all, which is the
+        # machine the service then told `/ready` it was fine on.
+        launchable, detail = await browser_is_launchable()
+        assert application.state.browser_available is launchable
+        assert application.state.browser_detail == detail
+        assert detail, "readiness has to be able to say why"
     # Teardown released the client without raising.
     assert application.state.services.http_client.is_closed

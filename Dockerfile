@@ -2,7 +2,14 @@
 
 # Playwright's own image already carries a matching Chromium and its system
 # libraries, which is far less fragile than installing them by hand.
-FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
+#
+# The tag must match the `playwright` version in `uv.lock`, because
+# `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` below means the image's browsers are the only
+# ones there are, and each Playwright release looks for its own build number. When the
+# lock moved to 1.62 against a 1.48 image, every search failed with `Executable doesn't
+# exist at /ms-playwright/chromium_headless_shell-1234/...` while `/ready` still said
+# the browser was fine. `tests/test_dockerfile_playwright.py` keeps the two equal.
+FROM mcr.microsoft.com/playwright/python:v1.62.0-jammy
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

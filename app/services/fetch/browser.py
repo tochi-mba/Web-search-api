@@ -49,6 +49,40 @@ def resolve_executable_path(explicit: str | None = None) -> str | None:
     return None
 
 
+async def browser_is_launchable(explicit: str | None = None) -> tuple[bool, str]:
+    """Whether a Chromium exists to launch, and what to say when one does not.
+
+    A real look at the filesystem, because the alternative was a configuration flag:
+    readiness used to be `resolve_executable_path() is not None or settings.browser_headless`,
+    and `browser_headless` defaults to true — so the service answered "headless chromium ready"
+    on a machine where launching it failed every time, for weeks. The failure surfaced when a
+    person asked a question and the assistant had to tell them the web was unreachable.
+
+    Cheap on purpose: Playwright reports where it expects its browser without launching one.
+    Async because the sync API refuses to run inside a running event loop, and the only
+    caller is a lifespan -- which is how the first version of this reported
+    "playwright could not report a browser: Error" on a container that was fine.
+    """
+    found = resolve_executable_path(explicit)
+    if found:
+        return True, f"chromium at {found}"
+    try:
+        from playwright.async_api import async_playwright
+
+        driver = await async_playwright().start()
+        try:
+            expected = driver.chromium.executable_path
+        finally:
+            await driver.stop()
+    except Exception as error:
+        return False, f"playwright could not report a browser: {type(error).__name__}"
+    # One stat of one local path, at startup, once. A thread for it would cost more than the
+    # microsecond it blocks the loop for.
+    if Path(expected).exists():  # noqa: ASYNC240
+        return True, f"chromium at {expected}"
+    return False, f"playwright expects a browser at {expected}, which is not there"
+
+
 @runtime_checkable
 class RouteLike(Protocol):
     """The part of Playwright's ``Route`` the resource filter uses."""
