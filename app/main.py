@@ -17,7 +17,7 @@ from app.config import Settings, get_settings
 from app.core.errors import DomainError, ValidationProblem
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import build_auth_middleware, request_context_middleware
-from app.services.fetch.browser import resolve_executable_path
+from app.services.fetch.browser import browser_is_launchable
 from app.services.preferences import build_preference_source
 
 logger = get_logger(__name__)
@@ -99,8 +99,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.preferences = services.preferences
 
     # The browser starts lazily on first use, so readiness reflects whether a
-    # browser could be launched at all rather than whether one is running.
-    app.state.browser_available = resolve_executable_path() is not None or settings.browser_headless
+    # browser could be launched at all rather than whether one is running. It used to be
+    # `... or settings.browser_headless`, which defaults to true and therefore said yes on a
+    # machine where every launch failed.
+    launchable, detail = await browser_is_launchable()
+    app.state.browser_available = launchable
+    app.state.browser_detail = detail
 
     try:
         yield

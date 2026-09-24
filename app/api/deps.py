@@ -221,7 +221,10 @@ async def get_readiness_components(request: Request) -> list[ReadinessComponent]
         ReadinessComponent(
             name="browser",
             ready=bool(browser),
-            detail="headless chromium ready" if browser else "browser not started",
+            detail=str(
+                getattr(request.app.state, "browser_detail", "")
+                or ("headless chromium ready" if browser else "no browser to launch")
+            ),
         )
     )
 
