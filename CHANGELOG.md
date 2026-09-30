@@ -38,8 +38,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Image startup uses its installed dependencies without synchronizing or downloading development tools.
 - The image copies `uv.lock`, builds frozen, and healthchecks `/healthy`.
 
-- CI inherits `FAMILY_GITHUB_TOKEN`; image builds accept a BuildKit `github_token`
-  secret so tagged client packages can be fetched from private family repositories.
+- CI gets a short-lived token from the family token broker over OIDC (`id-token: write`)
+  rather than inheriting a shared credential; image builds accept a BuildKit
+  `github_token` secret so tagged client packages can be fetched from private family
+  repositories.
   `make docker` uses the signed-in GitHub account without saving its token in an image.
 - Verify caller tokens through the shared keyring client: pin issuer and audience,
   require a signing-key id, rate limit refreshes and use a bounded stale-key grace.
