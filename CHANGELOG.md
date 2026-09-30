@@ -57,6 +57,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A 500 response carries `X-Request-ID` like every other response. Starlette renders
+  unhandled errors outside the user middleware, so the context middleware never stamped it.
 - Bind Serper to each request's caller so connected accounts can use the search backend.
 - Close the Playwright driver after a failed browser launch.
 - Hide resolved credential values and caller tokens in object representations.
