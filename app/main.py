@@ -14,6 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app import __version__
 from app.bootstrap import build_services
 from app.config import Settings, get_settings
+from app.constants import REQUEST_ID_HEADER
 from app.core.errors import DomainError, ValidationProblem
 from app.core.logging import configure_logging, get_logger
 from app.core.middleware import build_auth_middleware, request_context_middleware
@@ -78,7 +79,13 @@ async def unhandled_error_handler(request: Request, _exc: Exception) -> JSONResp
         "code": "internal_error",
         "instance": request.url.path,
     }
-    return _problem_response(problem, 500)
+    response = _problem_response(problem, 500)
+    # Starlette runs this handler outside every user middleware, so the context middleware
+    # never sees this response to stamp it; the id it stored on the request is still here.
+    request_id = getattr(request.state, "request_id", None)
+    if request_id:
+        response.headers[REQUEST_ID_HEADER] = request_id
+    return response
 
 
 @asynccontextmanager

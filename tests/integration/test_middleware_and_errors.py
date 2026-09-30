@@ -1,8 +1,9 @@
 import httpx
 import pytest
+from fastapi import Request
 
 from app.core.errors import RateLimitedError, UpstreamError
-from app.main import create_app
+from app.main import create_app, unhandled_error_handler
 from tests.conftest import make_settings
 
 
@@ -116,6 +117,43 @@ async def test_unhandled_exceptions_become_500_problems(settings):
     body = response.json()
     assert body["code"] == "internal_error"
     assert "leaky detail" not in response.text
+
+
+async def test_unhandled_exceptions_echo_the_callers_request_id(settings):
+    app = create_app(settings)
+
+    @app.get("/v1/kaboom")
+    async def kaboom() -> None:
+        raise RuntimeError("boom")
+
+    async with build_client(app) as client:
+        response = await client.get("/v1/kaboom", headers={"X-Request-ID": "trace-500"})
+
+    assert response.status_code == 500
+    assert response.headers["X-Request-ID"] == "trace-500"
+
+
+async def test_unhandled_exceptions_carry_a_generated_request_id(settings):
+    app = create_app(settings)
+
+    @app.get("/v1/kaboom")
+    async def kaboom() -> None:
+        raise RuntimeError("boom")
+
+    async with build_client(app) as client:
+        response = await client.get("/v1/kaboom")
+
+    assert response.status_code == 500
+    assert response.headers["X-Request-ID"]
+
+
+async def test_unhandled_error_handler_omits_the_header_without_a_request_id():
+    request = Request({"type": "http", "method": "GET", "path": "/x", "headers": []})
+
+    response = await unhandled_error_handler(request, RuntimeError("boom"))
+
+    assert response.status_code == 500
+    assert "X-Request-ID" not in response.headers
 
 
 async def test_request_validation_errors_render_as_problem_json(settings):
