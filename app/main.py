@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
-from app.bootstrap import build_services
+from app.bootstrap import build_services, llm_provider_count
 from app.config import Settings, get_settings
 from app.constants import REQUEST_ID_HEADER
 from app.core.errors import DomainError, ValidationProblem
@@ -137,7 +137,7 @@ def create_app(settings: Settings | None = None, *, settings_client: Any = None)
         version=__version__,
         summary=(
             "Scrape Google search results and web pages, then synthesise an "
-            "executive summary with any of ~60 LLM providers."
+            f"executive summary with any of {llm_provider_count()} LLM providers."
         ),
         lifespan=lifespan,
     )

@@ -1,4 +1,4 @@
-"""The one adapter serving ~50 vendors, plus a sweep over the whole spec table.
+"""The one adapter serving every row of the spec table, plus a sweep over all of them.
 
 Credentials arrive per call from keyring, so these tests inject a ResolvedAuth
 rather than setting environment variables.

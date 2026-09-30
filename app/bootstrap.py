@@ -64,6 +64,15 @@ class Services:
         await self.http_client.aclose()
 
 
+#: Providers with an adapter of their own, built ahead of the OpenAI-compatible table.
+NATIVE_PROVIDERS = ("anthropic", "ollama")
+
+
+def llm_provider_count() -> int:
+    """How many LLM providers every deployment builds, for text that states the number."""
+    return len(NATIVE_PROVIDERS) + len(OPENAI_COMPATIBLE_SPECS)
+
+
 def build_llm_providers(settings: Settings, client: httpx.AsyncClient) -> list[LLMProvider]:
     """Instantiate every LLM provider this deployment knows about.
 

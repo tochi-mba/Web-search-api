@@ -1,7 +1,7 @@
 [project]
 name = "web-search-api"
 version = "0.1.0"
-description = "FastAPI service that scrapes Google search results and web pages, then synthesises executive summaries with any of ~60 LLM providers."
+description = "FastAPI service that scrapes Google search results and web pages, then synthesises executive summaries with any of 54 LLM providers."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
