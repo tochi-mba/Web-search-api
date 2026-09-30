@@ -8,6 +8,8 @@ deployments crawling their own infrastructure.
 from __future__ import annotations
 
 import asyncio
+import time
+from collections.abc import Callable
 from urllib.parse import urlsplit
 from urllib.robotparser import RobotFileParser
 
@@ -30,6 +32,7 @@ class RobotsPolicy:
         *,
         user_agent: str,
         timeout_seconds: float = 5.0,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         """Create the policy.
 
@@ -37,11 +40,13 @@ class RobotsPolicy:
             client: HTTP client used to fetch robots.txt.
             user_agent: The agent string rules are evaluated against.
             timeout_seconds: Per-fetch timeout for robots.txt itself.
+            clock: Seconds that only go forward, for deciding when a copy is stale.
         """
         self._client = client
         self._user_agent = user_agent
         self._timeout = timeout_seconds
-        self._parsers: dict[str, RobotFileParser | None] = {}
+        self._clock = clock
+        self._parsers: dict[str, tuple[RobotFileParser | None, float]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
 
     def _lock_for(self, origin: str) -> asyncio.Lock:
@@ -53,17 +58,19 @@ class RobotsPolicy:
         return lock
 
     async def _parser_for(self, origin: str) -> RobotFileParser | None:
-        """Fetch and parse robots.txt for an origin, memoising the result.
+        """Fetch and parse robots.txt for an origin, keeping the result for an hour.
 
         Returns ``None`` when robots.txt is missing or unreadable, which by
-        convention means everything is allowed.
+        convention means everything is allowed. A copy older than
+        ``ROBOTS_CACHE_TTL_SECONDS`` is fetched again: a site that starts
+        refusing crawlers must not go on being crawled until the process restarts.
         """
-        if origin in self._parsers:
-            return self._parsers[origin]
+        if self._fresh(origin):
+            return self._parsers[origin][0]
 
         async with self._lock_for(origin):
-            if origin in self._parsers:
-                return self._parsers[origin]
+            if self._fresh(origin):
+                return self._parsers[origin][0]
 
             parser: RobotFileParser | None = None
             try:
@@ -81,8 +88,13 @@ class RobotsPolicy:
                 else:
                     logger.debug("robots.absent", origin=origin, status=response.status_code)
 
-            self._parsers[origin] = parser
+            self._parsers[origin] = (parser, self._clock())
             return parser
+
+    def _fresh(self, origin: str) -> bool:
+        """Whether this origin's robots.txt was fetched recently enough to trust."""
+        held = self._parsers.get(origin)
+        return held is not None and self._clock() - held[1] < ROBOTS_CACHE_TTL_SECONDS
 
     async def can_fetch(self, url: str) -> bool:
         """Whether robots.txt permits fetching ``url``."""

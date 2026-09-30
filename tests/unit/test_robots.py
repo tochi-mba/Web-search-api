@@ -2,7 +2,7 @@ import httpx
 import pytest
 import respx
 
-from app.services.robots import RobotsPolicy
+from app.services.robots import ROBOTS_CACHE_TTL_SECONDS, RobotsPolicy
 
 ROBOTS = """
 User-agent: *
@@ -111,3 +111,21 @@ async def test_a_lock_is_reused_for_the_same_origin(policy):
     first = policy._lock_for("https://example.com")
     second = policy._lock_for("https://example.com")
     assert first is second
+
+
+@respx.mock
+async def test_a_copy_older_than_an_hour_is_fetched_again(client):
+    """The docs say robots.txt is "cached for an hour". It was cached until the process
+    ended: a site that started refusing crawlers went on being crawled."""
+    now = [0.0]
+    policy = RobotsPolicy(client, user_agent="test-agent", clock=lambda: now[0])
+    route = respx.get("https://example.com/robots.txt").mock(
+        side_effect=[httpx.Response(404), httpx.Response(200, text=ROBOTS)]
+    )
+
+    assert await policy.can_fetch("https://example.com/private/secret") is True
+    now[0] = ROBOTS_CACHE_TTL_SECONDS - 1
+    assert await policy.can_fetch("https://example.com/private/secret") is True
+    now[0] = ROBOTS_CACHE_TTL_SECONDS
+    assert await policy.can_fetch("https://example.com/private/secret") is False
+    assert route.call_count == 2
