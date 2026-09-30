@@ -232,8 +232,9 @@ address.
 manually rather than by httpx, because validating only the caller's URL is
 worthless if it may redirect to `127.0.0.1` or `169.254.169.254`.
 
-Also enforced: robots.txt (per-host, cached), response size caps, redirect
-budgets, a content-type allowlist, and a global plus per-host concurrency limit.
+Also enforced: robots.txt (per origin, cached for an hour), a cap on the response
+bytes kept, a redirect budget, a content-type allowlist, and a global concurrency
+limit. There is no per-host limit.
 
 Set `WSA_API_KEYS` to require an API key in the `X-API-Key` header.
 `Authorization: Bearer` is not accepted for it: that header carries the keyring user
@@ -252,7 +253,7 @@ Every value is optional — see `.env.example` for the full list.
 |---|---|---|
 | `WSA_DEFAULT_MODEL` | `anthropic:claude-opus-5` | Used when a caller does not choose. |
 | `WSA_MAX_CONTENT_CHARS` | `40000` | Hard truncation ceiling. |
-| `WSA_RESPECT_ROBOTS` | `true` | Honour robots.txt on `/v1/scrape`. |
+| `WSA_RESPECT_ROBOTS` | `true` | Honour robots.txt on every page fetch: `/v1/scrape`, and `/v1/search` with `fetch_pages`. |
 | `WSA_ALLOW_PRIVATE_NETWORKS` | `false` | Permit private addresses. Metadata hosts stay blocked. |
 | `WSA_SEARCH_BACKEND` | `google` | Preferred backend. |
 | `WSA_API_KEYS` | *(empty)* | Optional front-door gate. The keyring user token is the real identity. |
