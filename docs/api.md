@@ -19,15 +19,18 @@ documents with content type `application/problem+json`:
 
 | Code | Status | Meaning |
 |---|---|---|
-| `validation_problem` | 400/422 | Request was malformed or semantically invalid |
-| `auth_error` | 401 | Missing or wrong API key |
+| `validation_problem` | 400/422 | Request was malformed or semantically invalid. A `422` carries an `errors` list of `{loc, msg}` |
+| `auth_error` | 401 | Missing or wrong API key, or a user token that failed verification |
 | `forbidden_url_error` | 403 | Blocked by SSRF policy or robots.txt |
-| `not_found_error` | 404 | Unknown model, provider or route |
+| `not_found_error` | 404 | Unknown model, provider or job, or no credential for the chosen model |
+| `http_error` | 404/405 | No such route, or the wrong method for one |
 | `rate_limited_error` | 429 | An upstream rate limit was hit |
 | `upstream_error` | 502 | A site or provider failed |
 | `search_blocked_error` | 502 | The engine served a consent wall or CAPTCHA |
-| `provider_unavailable_error` | 503 | No provider or backend is reachable |
+| `provider_unavailable_error` | 503 | No provider or backend is reachable, or keyring is unreachable or not configured |
+| `preferences_unavailable_error` | 503 | settings-api refused this service, or a setting that must not be guessed could not be read |
 | `timeout_problem` | 504 | An upstream call exceeded its deadline |
+| `internal_error` | 500 | Anything unexpected. The detail is generic on purpose. Send your own `X-Request-ID` to find the log record: this response does not echo one |
 
 ---
 

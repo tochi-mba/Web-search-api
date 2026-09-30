@@ -228,7 +228,9 @@ What the service does for itself:
 - **Every rejection of a token says the same thing.** Which check failed goes to the log,
   where an operator reads it and a forger does not.
 - Unexpected error text is never returned to callers; it can carry URLs or credentials.
-  Callers get a request id that ties the response to the full log record.
+  The `request.failed` log record carries the request id. Every other response echoes
+  `X-Request-ID`, but an unexpected `500` does not, so a caller who wants to quote one
+  should send its own `X-Request-ID`.
 
 What remains your problem:
 
