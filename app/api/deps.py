@@ -254,20 +254,27 @@ async def get_readiness_components(request: Request) -> list[ReadinessComponent]
         if provider.status is not ProviderStatus.NOT_CONFIGURED
     ]
     available = sum(1 for provider in catalog.providers if provider.is_available)
+    credentialed = registry.credentialed_provider_names(disabled_providers=disabled)
     # Ready means this service can serve a caller who brings a credential -- not that an
-    # anonymous probe reached a model. Most providers need a per-caller credential from
-    # keyring, so requiring a model here reported a healthy, cloud-only deployment as
-    # permanently unready while every real caller was being served.
+    # anonymous probe reached a model. That probe carries nobody's credential, so it sees a
+    # cloud provider as not_configured; counting only what it saw reported a cloud-only
+    # deployment, every local runtime turned off, as permanently unready while every real
+    # caller was being served.
+    found: list[str] = []
+    if configured:
+        found.append(
+            f"{len(configured)} providers configured, {available} reachable without a "
+            f"credential, {len(catalog.models)} models listed anonymously"
+        )
+    if credentialed:
+        found.append(
+            f"{len(credentialed)} providers usable with a caller's credential from keyring"
+        )
     checks.append(
         ReadinessComponent(
             name="llm",
-            ready=bool(configured),
-            detail=(
-                f"{len(configured)} providers configured, {available} reachable without a "
-                f"credential, {len(catalog.models)} models listed anonymously"
-                if configured
-                else "no provider configured"
-            ),
+            ready=bool(found),
+            detail="; ".join(found) or "no provider configured",
         )
     )
     return checks

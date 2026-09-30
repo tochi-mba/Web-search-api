@@ -51,13 +51,15 @@ and a `detail` string:
   "components": [
     {"name": "browser", "ready": true, "detail": "chromium at /usr/bin/chromium"},
     {"name": "llm", "ready": true,
-     "detail": "10 providers configured, 1 reachable without a credential, 3 models listed anonymously"}
+     "detail": "10 providers configured, 1 reachable without a credential, 3 models listed anonymously; 44 providers usable with a caller's credential from keyring"}
   ]
 }
 ```
 
 `ready` is true, and the status `200`, only when a Chromium exists to launch
-**and** the anonymous provider probe found at least one provider configured.
+**and** at least one provider could serve somebody: a credential-free runtime the
+anonymous probe found configured, or a provider that needs a credential while keyring is
+configured to supply one.
 Otherwise the status is `503`, `status` is `degraded`, and the failing
 component's `detail` says why. What counts as configured is explained in
 [operations.md](operations.md#readiness).

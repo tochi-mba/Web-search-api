@@ -293,3 +293,33 @@ async def test_a_credential_revoked_after_the_catalogue_was_built(keyring, vault
 
     with pytest.raises(NotFoundError, match="stored in keyring"):
         await registry.complete(chat_request(), model_id="anthropic:m", caller=caller)
+
+
+# --- what a credentialed caller could use ----------------------------------- #
+
+
+class Unconfigured(Provider):
+    """A provider whose endpoint this deployment turned off."""
+
+    def is_configured(self):
+        return False
+
+
+def test_credentialed_providers_are_those_keyring_could_serve(keyring):
+    registry = build(
+        [
+            Provider("anthropic"),
+            Provider("groq"),
+            Provider("ollama", requires_credential=False),
+            Unconfigured("openai"),
+        ],
+        keyring,
+    )
+    assert registry.credentialed_provider_names() == ["anthropic", "groq"]
+    assert registry.credentialed_provider_names(disabled_providers={"groq"}) == ["anthropic"]
+
+
+def test_without_keyring_no_credentialed_provider_is_usable(http):
+    assert build([Provider("anthropic")]).credentialed_provider_names() == []
+    unconfigured = KeyringClient(http, base_url="", service_token="svc")
+    assert build([Provider("anthropic")], unconfigured).credentialed_provider_names() == []

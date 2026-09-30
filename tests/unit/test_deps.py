@@ -31,11 +31,33 @@ def make_request(**state):
 
 
 class FakeRegistry:
-    def __init__(self, catalog):
+    def __init__(self, catalog, credentialed=()):
         self._catalog = catalog
+        self._credentialed = list(credentialed)
+        self.disabled_seen: list[frozenset[str]] = []
 
     async def catalog(self, caller=None, *, refresh=False, disabled_providers=()):
         return self._catalog
+
+    def credentialed_provider_names(self, disabled_providers=()):
+        self.disabled_seen.append(frozenset(disabled_providers))
+        return [name for name in self._credentialed if name not in disabled_providers]
+
+
+class DisablingPreferences:
+    """A preference source whose deployment-wide disabled list names some providers."""
+
+    def __init__(self, disabled):
+        self._disabled = frozenset(disabled)
+
+    async def for_token(self, user_token=None, /):
+        return self
+
+    async def aclose(self):
+        return None
+
+    def require_disabled_providers(self):
+        return self._disabled
 
 
 class UnreachableSettings:
@@ -250,3 +272,64 @@ async def test_settings_api_being_unreachable_does_not_fail_the_probe():
     )
 
     assert next(c for c in components if c.name == "llm").ready is True
+
+
+async def test_a_cloud_only_deployment_is_ready():
+    # Every local runtime turned off, keyring configured: the anonymous probe sees every
+    # provider as not_configured, because it carries nobody's credential. Callers who bring
+    # a token are still served, so this process is ready.
+    catalog = ModelCatalog(
+        models=[],
+        providers=[
+            ProviderHealth(name="anthropic", status=ProviderStatus.NOT_CONFIGURED),
+            ProviderHealth(name="ollama", status=ProviderStatus.NOT_CONFIGURED),
+        ],
+    )
+
+    components = await get_readiness_components(
+        make_request(
+            browser_available=True,
+            model_registry=FakeRegistry(catalog, credentialed=["anthropic", "groq"]),
+            settings=make_settings(),
+        )
+    )
+
+    llm = next(c for c in components if c.name == "llm")
+    assert llm.ready is True
+    assert llm.detail == "2 providers usable with a caller's credential from keyring"
+
+
+async def test_readiness_reports_local_and_credentialed_providers_together():
+    catalog = ModelCatalog(
+        models=[ModelInfo.build("ollama", "m")],
+        providers=[ProviderHealth(name="ollama", status=ProviderStatus.AVAILABLE)],
+    )
+
+    components = await get_readiness_components(
+        make_request(
+            browser_available=True,
+            model_registry=FakeRegistry(catalog, credentialed=["anthropic"]),
+            settings=make_settings(),
+        )
+    )
+
+    assert next(c for c in components if c.name == "llm").detail == (
+        "1 providers configured, 1 reachable without a credential, 1 models listed "
+        "anonymously; 1 providers usable with a caller's credential from keyring"
+    )
+
+
+async def test_readiness_does_not_count_a_disabled_credentialed_provider():
+    registry = FakeRegistry(ModelCatalog(), credentialed=["anthropic"])
+
+    components = await get_readiness_components(
+        make_request(
+            browser_available=True,
+            model_registry=registry,
+            settings=make_settings(),
+            preferences=DisablingPreferences({"anthropic"}),
+        )
+    )
+
+    assert next(c for c in components if c.name == "llm").ready is False
+    assert registry.disabled_seen == [frozenset({"anthropic"})]

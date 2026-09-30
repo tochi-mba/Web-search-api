@@ -66,6 +66,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `/ready` counts a provider that needs a credential when keyring is configured to supply
+  one. A cloud-only deployment, every local runtime turned off, answered `503` although
+  every caller bringing a token was served, because the anonymous probe sees each cloud
+  provider as `not_configured`.
 - `scripts/smoke.py` exits non-zero and lists what failed when any call is not a 200,
   readiness is degraded, or a batch item is in error. It used to print "Smoke test
   complete." and exit 0 whatever came back, and told you to "set a provider key", which
