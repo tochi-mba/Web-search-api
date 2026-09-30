@@ -66,6 +66,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `scripts/smoke.py` exits non-zero and lists what failed when any call is not a 200,
+  readiness is degraded, or a batch item is in error. It used to print "Smoke test
+  complete." and exit 0 whatever came back, and told you to "set a provider key", which
+  this service never reads. It now sends a user token (`--token` or `SMOKE_USER_TOKEN`)
+  and the `X-API-Key` gate's key (`--api-key`).
 - A fetched body is streamed and reading stops at `WSA_MAX_RESPONSE_BYTES`. It used to be
   read whole and trimmed afterwards, so the cap bounded what was parsed but not what was
   downloaded or held in memory.

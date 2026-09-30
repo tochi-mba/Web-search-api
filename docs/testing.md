@@ -99,10 +99,18 @@ uv run python scripts/smoke.py --model ollama:llama3.1:8b  # in another
 ```
 
 `scripts/smoke.py` checks health and readiness, lists models, then summarises, scrapes
-and searches once each. It sends no user token, so it can only use a credential-free
-runtime such as a local Ollama; a provider key in the environment does nothing, because
-this service never reads one. To try a credentialed provider, set up keyring as in
-[keyring.md](keyring.md) and send the user token yourself:
+and searches once each. It exits 0 only if every call answered 200 and no batch item came
+back in error, and it lists what failed otherwise. A provider key in the environment does
+nothing, because this service never reads one. Without a user token it can only use a
+credential-free runtime such as a local Ollama. To try a credentialed provider, set up
+keyring as in [keyring.md](keyring.md) and pass the token with `--token` or
+`SMOKE_USER_TOKEN` (and the gate's key with `--api-key` if `WSA_API_KEYS` is set):
+
+```bash
+SMOKE_USER_TOKEN=$USER_TOKEN uv run python scripts/smoke.py --model anthropic:claude-opus-5
+```
+
+Or make the calls yourself:
 
 ```bash
 curl -s localhost:8006/v1/models -H "Authorization: Bearer $USER_TOKEN" \
