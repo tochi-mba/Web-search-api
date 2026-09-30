@@ -230,10 +230,12 @@ worthless if it may redirect to `127.0.0.1` or `169.254.169.254`.
 Also enforced: robots.txt (per-host, cached), response size caps, redirect
 budgets, a content-type allowlist, and a global plus per-host concurrency limit.
 
-Set `WSA_API_KEYS` to require an API key (`X-API-Key` or `Bearer`). Health
-endpoints stay public so probes keep working. Note that under keyring the user
-token is the real identity — a caller without one cannot resolve any credential
-— so `WSA_API_KEYS` is a network-level control on top of that, not the primary one.
+Set `WSA_API_KEYS` to require an API key in the `X-API-Key` header.
+`Authorization: Bearer` is not accepted for it: that header carries the keyring user
+token. Health endpoints and the interactive docs stay public so probes keep working.
+Under keyring the user token is the real identity — a caller without one cannot
+resolve any credential — so `WSA_API_KEYS` is a network-level control on top of
+that, not the primary one.
 
 ---
 
