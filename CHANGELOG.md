@@ -57,6 +57,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- The `openai` dependency. Nothing imported it: OpenAI is a row in the spec table,
+  served by the plain-`httpx` adapter like every other OpenAI-compatible vendor. A test
+  now fails when a declared runtime dependency is no longer imported.
 - `ProviderSpec.base_url_env`. Nine local-runtime rows named an environment variable
   (`LMSTUDIO_BASE_URL`, `VLLM_BASE_URL`, ...) that nothing read; endpoints are overridden
   through `WSA_PROVIDER_BASE_URLS`.

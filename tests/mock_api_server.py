@@ -1,6 +1,6 @@
 """A tiny recording HTTP server for testing SDK-based providers.
 
-The Anthropic and OpenAI SDKs are built on ``httpx2``, which ``respx`` cannot
+The Anthropic SDK is built on ``httpx2``, which ``respx`` cannot
 patch. Rather than stub the SDK methods - which would test our mocks instead of
 our request shaping - these tests point the SDK's ``base_url`` at a real local
 server and assert the bytes that actually go on the wire.
