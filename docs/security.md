@@ -66,8 +66,9 @@ anything that executes actions without review.
 ## Authentication
 
 Off by default. Set `WSA_API_KEYS` to a comma-separated list to require a key
-via `X-API-Key` or `Authorization: Bearer`. Health endpoints stay public so
-orchestrator probes keep working.
+in the `X-API-Key` header. `Authorization: Bearer` does not satisfy it: that header
+carries the keyring user token, which is a separate check. Health endpoints and the
+interactive docs stay public so orchestrator probes keep working.
 
 Keys are compared against a configured list. For anything beyond a trusted
 network, put a real gateway in front.

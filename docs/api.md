@@ -211,5 +211,8 @@ means that account has no credential for it.
 
 ## Authentication
 
-Off unless `WSA_API_KEYS` is set. When enabled, send `X-API-Key: <key>` or
-`Authorization: Bearer <key>`. Health endpoints remain public.
+Off unless `WSA_API_KEYS` is set. When enabled, send `X-API-Key: <key>`. The key is
+not accepted as `Authorization: Bearer`, because that header carries the keyring user
+token described above. A missing or unknown key is `401 auth_error`. `/health`,
+`/healthy`, `/ready`, `/health/ready`, `/docs`, `/redoc` and `/openapi.json` stay
+public.
