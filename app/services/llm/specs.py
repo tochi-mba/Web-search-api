@@ -61,7 +61,6 @@ class ProviderSpec:
     auth_header: str | None = None
     models_path: str = "/models"
     chat_path: str = "/chat/completions"
-    base_url_env: str | None = None
     #: Models to offer when the provider exposes no usable list endpoint.
     static_models: tuple[str, ...] = field(default_factory=tuple)
     docs_url: str = ""
@@ -243,76 +242,31 @@ OPENAI_COMPATIBLE_SPECS: tuple[ProviderSpec, ...] = (
     _spec("v0", "Vercel v0", "https://api.v0.dev/v1", kind=A),
     _spec("morph", "Morph", "https://api.morphllm.com/v1", kind=A),
     # ------------------------------------------------------------ local runtimes
-    _spec(
-        "lmstudio",
-        "LM Studio",
-        "http://localhost:1234/v1",
-        kind=L,
-        auth=AuthStyle.NONE,
-        base_url_env="LMSTUDIO_BASE_URL",
-    ),
-    _spec(
-        "vllm",
-        "vLLM",
-        "http://localhost:8006/v1",
-        kind=L,
-        auth=AuthStyle.NONE,
-        base_url_env="VLLM_BASE_URL",
-    ),
+    _spec("lmstudio", "LM Studio", "http://localhost:1234/v1", kind=L, auth=AuthStyle.NONE),
+    _spec("vllm", "vLLM", "http://localhost:8006/v1", kind=L, auth=AuthStyle.NONE),
     _spec(
         "llamacpp",
         "llama.cpp / llamafile",
         "http://localhost:8080/v1",
         kind=L,
         auth=AuthStyle.NONE,
-        base_url_env="LLAMACPP_BASE_URL",
     ),
-    _spec(
-        "localai",
-        "LocalAI",
-        "http://localhost:8080/v1",
-        kind=L,
-        auth=AuthStyle.NONE,
-        base_url_env="LOCALAI_BASE_URL",
-    ),
-    _spec(
-        "xinference",
-        "Xinference",
-        "http://localhost:9997/v1",
-        kind=L,
-        auth=AuthStyle.NONE,
-        base_url_env="XINFERENCE_BASE_URL",
-    ),
-    _spec(
-        "jan",
-        "Jan",
-        "http://localhost:1337/v1",
-        kind=L,
-        auth=AuthStyle.NONE,
-        base_url_env="JAN_BASE_URL",
-    ),
+    _spec("localai", "LocalAI", "http://localhost:8080/v1", kind=L, auth=AuthStyle.NONE),
+    _spec("xinference", "Xinference", "http://localhost:9997/v1", kind=L, auth=AuthStyle.NONE),
+    _spec("jan", "Jan", "http://localhost:1337/v1", kind=L, auth=AuthStyle.NONE),
     _spec(
         "textgen_webui",
         "text-generation-webui",
         "http://localhost:5000/v1",
         kind=L,
         auth=AuthStyle.NONE,
-        base_url_env="TEXTGEN_BASE_URL",
     ),
-    _spec(
-        "koboldcpp",
-        "KoboldCpp",
-        "http://localhost:5001/v1",
-        kind=L,
-        auth=AuthStyle.NONE,
-        base_url_env="KOBOLDCPP_BASE_URL",
-    ),
+    _spec("koboldcpp", "KoboldCpp", "http://localhost:5001/v1", kind=L, auth=AuthStyle.NONE),
     _spec(
         "docker_model_runner",
         "Docker Model Runner",
         "http://localhost:12434/engines/v1",
         kind=L,
         auth=AuthStyle.NONE,
-        base_url_env="DOCKER_MODEL_RUNNER_BASE_URL",
     ),
 )

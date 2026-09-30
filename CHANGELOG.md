@@ -55,6 +55,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Align development tooling with the family Makefile: `make check` runs lint,
   mypy, import-linter contracts and pytest at 100% branch coverage.
 
+### Removed
+
+- `ProviderSpec.base_url_env`. Nine local-runtime rows named an environment variable
+  (`LMSTUDIO_BASE_URL`, `VLLM_BASE_URL`, ...) that nothing read; endpoints are overridden
+  through `WSA_PROVIDER_BASE_URLS`.
+
 ### Fixed
 
 - A fetched body is streamed and reading stops at `WSA_MAX_RESPONSE_BYTES`. It used to be

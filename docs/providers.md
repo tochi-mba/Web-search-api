@@ -34,7 +34,6 @@ automatically and fails if it is malformed.
 | `auth_header` | Header name when `auth="header"` |
 | `models_path` | Defaults to `/models` |
 | `chat_path` | Defaults to `/chat/completions` |
-| `base_url_env` | Recorded for local runtimes, but nothing reads it: override an endpoint with `WSA_PROVIDER_BASE_URLS` |
 | `static_models` | Models to offer when there is no usable list endpoint |
 | `docs_url` | Where the vendor documents its OpenAI-compatible endpoint, for whoever maintains the row |
 
