@@ -58,7 +58,7 @@ tests/
 
 ## Conventions
 
-- **Python 3.11**, fully typed, `mypy --strict` on `app/`. Tests are type-checked
+- **Python 3.12**, fully typed, `mypy --strict` on `app/`. Tests are type-checked
   but not required to annotate every fixture. Import-linter contracts in
   `pyproject.toml` keep `keyring_client` in `app.services.keyring` and
   `app.config`, `settings_client` in `app.services.preferences`, Playwright
