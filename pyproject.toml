@@ -16,7 +16,6 @@ dependencies = [
     "selectolax>=0.3.21",
     "playwright>=1.48",
     "anthropic>=0.40",
-    "openai>=1.55",
     "pyjwt>=2.13.0",
     "cryptography>=50.0.1",
     "keyring-client",
