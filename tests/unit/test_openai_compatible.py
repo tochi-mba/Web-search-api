@@ -4,6 +4,8 @@ Credentials arrive per call from keyring, so these tests inject a ResolvedAuth
 rather than setting environment variables.
 """
 
+import dataclasses
+
 import httpx
 import pytest
 import respx
@@ -546,3 +548,9 @@ def test_bearer_specs_provision_onto_authorization():
     spec = ProviderSpec(key="bv", label="Bearer Vendor", base_url="https://bv.test/v1")
     assert spec.default_header == "Authorization"
     assert spec.default_template == "Bearer {value}"
+
+
+def test_no_spec_field_names_an_environment_variable():
+    # Endpoints are overridden through WSA_PROVIDER_BASE_URLS and keys come from keyring,
+    # so a field naming an environment variable would promise an override nothing reads.
+    assert [f.name for f in dataclasses.fields(ProviderSpec) if f.name.endswith("_env")] == []
