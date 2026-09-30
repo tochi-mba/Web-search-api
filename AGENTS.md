@@ -49,11 +49,15 @@ app/
     preferences.py per-person settings from settings-api (ships dark)
     pipelines.py  the work behind each endpoint, shared by sync and background
   api/            deps (DI), mapping, routes
+scripts/
+  provision_keyring.py  store provider keys in keyring in the shape each vendor wants
+  smoke.py              manual run against a live server; never part of the suite
 tests/
   unit/           one module per source module
   integration/    endpoints via ASGITransport with fakes injected
   browser/        real Chromium against a local fixture server
   fixtures/html/  saved HTML — the honest record of markup we expect
+  test_dockerfile_playwright.py  keeps the image's Playwright tag equal to uv.lock
 ```
 
 ## Conventions
