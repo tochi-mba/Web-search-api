@@ -1,7 +1,7 @@
 """One adapter for every OpenAI-compatible provider.
 
-Parameterised by a :class:`~app.services.llm.specs.ProviderSpec`, so the ~50
-vendors that speak OpenAI's wire format share a single tested implementation.
+Parameterised by a :class:`~app.services.llm.specs.ProviderSpec`, so every vendor in
+``OPENAI_COMPATIBLE_SPECS`` shares a single tested implementation.
 Per-model differences are handled by the capability layer, not here, and
 credentials arrive per call from keyring rather than being held here at all.
 """

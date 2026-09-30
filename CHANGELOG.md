@@ -66,6 +66,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The package description and the OpenAPI summary said "~60 LLM providers"; there are 54.
+  The summary now derives the number from what bootstrap builds, and a test holds
+  `pyproject.toml`, `README.md` and `AGENTS.md` to it.
 - `/ready` counts a provider that needs a credential when keyring is configured to supply
   one. A cloud-only deployment, every local runtime turned off, answered `503` although
   every caller bringing a token was served, because the anonymous probe sees each cloud
