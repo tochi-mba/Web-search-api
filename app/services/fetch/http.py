@@ -7,6 +7,8 @@ of the caller's URL is worthless if a public URL is allowed to redirect to
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from urllib.parse import urljoin
 
@@ -84,29 +86,34 @@ class HttpFetcher:
         current = original
 
         for _ in range(self._max_redirects + 1):
-            response = await self._request(current)
+            async with self._request(current) as response:
+                if response.is_redirect:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise UpstreamError(
+                            "Malformed redirect",
+                            detail=f"{current} returned {response.status_code} with no Location.",
+                        )
+                    current = self._validate(urljoin(current, location))
+                    continue
 
-            if response.is_redirect:
-                location = response.headers.get("location")
-                if not location:
-                    raise UpstreamError(
-                        "Malformed redirect",
-                        detail=f"{current} returned {response.status_code} with no Location.",
-                    )
-                current = self._validate(urljoin(current, location))
-                continue
-
-            return self._to_result(original, current, response)
+                return await self._to_result(original, current, response)
 
         raise ForbiddenUrlError(
             "Too many redirects",
             detail=f"{original} exceeded the limit of {self._max_redirects} redirects.",
         )
 
-    async def _request(self, url: str) -> httpx.Response:
-        """Issue a single request, translating transport failures."""
+    @asynccontextmanager
+    async def _request(self, url: str) -> AsyncIterator[httpx.Response]:
+        """Open a single streamed request, translating transport failures.
+
+        The body is not read here. A failure while it is read later, inside the ``with``,
+        is translated the same way.
+        """
         try:
-            return await self._client.get(
+            async with self._client.stream(
+                "GET",
                 url,
                 headers={
                     "User-Agent": self._user_agent,
@@ -114,7 +121,8 @@ class HttpFetcher:
                 },
                 timeout=self._timeout,
                 follow_redirects=False,
-            )
+            ) as response:
+                yield response
         except httpx.TimeoutException as exc:
             raise TimeoutProblem(
                 "Fetch timed out", detail=f"{url} did not respond within {self._timeout}s."
@@ -122,7 +130,7 @@ class HttpFetcher:
         except httpx.HTTPError as exc:
             raise UpstreamError("Fetch failed", detail=f"{url}: {exc}") from exc
 
-    def _to_result(self, original: str, final: str, response: httpx.Response) -> FetchResult:
+    async def _to_result(self, original: str, final: str, response: httpx.Response) -> FetchResult:
         """Validate a terminal response and turn it into a :class:`FetchResult`."""
         if response.status_code >= 400:
             raise UpstreamError(
@@ -137,11 +145,9 @@ class HttpFetcher:
                 detail=f"{final} returned {content_type}, which is not a readable document.",
             )
 
-        body = response.content[: self._max_bytes].decode(
+        body = (await self._read_capped(response, final)).decode(
             response.encoding or "utf-8", errors="replace"
         )
-        if len(response.content) > self._max_bytes:
-            logger.info("fetch.truncated_body", url=final, limit=self._max_bytes)
 
         return FetchResult(
             url=original,
@@ -150,3 +156,17 @@ class HttpFetcher:
             content_type=content_type,
             body=body,
         )
+
+    async def _read_capped(self, response: httpx.Response, final: str) -> bytes:
+        """Read at most the size cap, then stop, leaving the rest of the body unread.
+
+        Reading the whole body and slicing it afterwards would let an origin that streams
+        without end hold as much memory as it cares to send.
+        """
+        buffer = bytearray()
+        async for chunk in response.aiter_bytes():
+            buffer += chunk
+            if len(buffer) > self._max_bytes:
+                logger.info("fetch.truncated_body", url=final, limit=self._max_bytes)
+                break
+        return bytes(buffer[: self._max_bytes])
