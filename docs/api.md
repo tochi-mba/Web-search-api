@@ -31,17 +31,33 @@ documents with content type `application/problem+json`:
 
 ---
 
-## `GET /health`
+## `GET /healthy` (also `/health`)
 
-Liveness. Does no I/O, so a slow dependency never triggers a restart.
-Also available at `/healthy`.
+Liveness. Does no I/O, so a slow dependency never triggers a restart. Answers
+`{"status": "ok", "service": ..., "version": ..., "uptime_seconds": ...}`.
 
-## `GET /ready` (alias: `/health/ready`)
+## `GET /ready` (also `/health/ready`)
 
-Returns HTTP 503 when any dependency is degraded and 200 when ready.
+Readiness. The body lists two components, `browser` and `llm`, each with `ready`
+and a `detail` string:
 
-Readiness. `ready` is true only when a browser is available **and** at least one
-LLM provider is reachable. Returns 200 either way; read the body.
+```json
+{
+  "status": "ok",
+  "ready": true,
+  "components": [
+    {"name": "browser", "ready": true, "detail": "chromium at /usr/bin/chromium"},
+    {"name": "llm", "ready": true,
+     "detail": "10 providers configured, 1 reachable without a credential, 3 models listed anonymously"}
+  ]
+}
+```
+
+`ready` is true, and the status `200`, only when a Chromium exists to launch
+**and** the anonymous provider probe found at least one provider configured.
+Otherwise the status is `503`, `status` is `degraded`, and the failing
+component's `detail` says why. What counts as configured is explained in
+[operations.md](operations.md#readiness).
 
 ## `GET /v1/models`
 

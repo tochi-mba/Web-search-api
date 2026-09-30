@@ -25,8 +25,8 @@ work without keyring at all.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /health` (alias `/healthy`) | Liveness. Does no I/O. |
-| `GET /ready` (also `/health/ready`) | Readiness: 200 when ready, 503 when dependencies are degraded. |
+| `GET /healthy` (also `/health`) | Liveness. Does no I/O. |
+| `GET /ready` (also `/health/ready`) | Readiness: 200 when a browser can launch and a provider is configured, otherwise 503 naming which. |
 | `GET /v1/models` | Models reachable **right now**, with per-model capabilities. |
 | `POST /v1/search` | Batch Google queries → results (+ optional deep fetch) + summary. |
 | `POST /v1/scrape` | Batch URLs → clean extracted text + summary. |

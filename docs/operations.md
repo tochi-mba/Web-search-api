@@ -167,13 +167,17 @@ secret.
 
 - **browser** — whether a browser *could* be launched, not whether one is running. The
   browser starts lazily on first use.
-- **llm** — whether any provider is configured, with how many of them answer without a
-  credential and how many models an anonymous probe could list.
+- **llm** — whether an anonymous probe found any provider configured, with how many of
+  them answered without a credential and how many models it could list.
 
-The probe acts for nobody, so it carries no credential. Most providers need a per-caller
-credential from keyring, so requiring a *model* here would report a perfectly healthy
-cloud-only deployment as permanently unready; whether one caller's credential works is
-answered per request, not by a probe. A settings-api outage does not fail it either: it
+The probe acts for nobody, so it carries no credential. A provider that needs one reports
+`not_configured` to it and does not count. What counts is a credential-free runtime with a
+base URL, whether or not anything is listening there, and Ollama's default URL means a
+stock deployment always has one. Requiring a reachable *model* instead would report a
+healthy cloud-only deployment as permanently unready; whether one caller's credential
+works is answered per request, not by a probe. The consequence to know: a deployment
+that disables every local runtime answers `503` here even though callers who bring a
+credential are served. A settings-api outage does not fail it either: it
 applies no person's disabled-provider list, so there is nothing to guess at.
 
 ## Deploying
@@ -184,7 +188,7 @@ and the reason `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` is set. It runs as the unpri
 `pwuser` the base image provides, binds `0.0.0.0:8006`, and exposes that port. There is no
 `HOST` or `PORT` setting; change the bind in a reverse proxy, not here.
 
-The container `HEALTHCHECK` probes **`/health`**, not `/ready`, so a keyring blip or an
+The container `HEALTHCHECK` probes **`/healthy`**, not `/ready`, so a keyring blip or an
 unreachable provider does not restart the container.
 
 A load balancer should use **`/ready`**: it answers 503 only when this process cannot serve
@@ -246,7 +250,8 @@ What remains your problem:
 | Every request answers `401 auth_error` on a deployment that worked | `WSA_KEYRING_ISSUER` or `WSA_KEYRING_SERVICE_NAME` no longer matches keyring. Both fail closed and say nothing more. |
 | A token gets `503` saying keyring is not configured | A user token arrived at a deployment in anonymous mode. Set both keyring variables, or stop sending a token. |
 | `503` naming keyring unreachable | Keyring's signing keys cannot be fetched. Cached keys survive a bounded outage; a cold start does not. |
-| `/ready` is `503` with "no reachable LLM provider" | Readiness probes anonymously, so only credential-free runtimes can satisfy it. Expected on a cloud-only deployment — use `/health` for liveness. |
+| `/ready` is `503`, `browser` says "playwright expects a browser at …, which is not there" | No Chromium to launch. Install the build this Playwright wants, or point `WSA_BROWSER_EXECUTABLE_PATH` at one. Checked once at startup, so restart afterwards. |
+| `/ready` is `503`, `llm` says "no provider configured" | The anonymous probe found no credential-free runtime with a base URL: every local runtime is disabled or set to `""` in `WSA_PROVIDER_BASE_URLS`. Providers that need a credential never count here. See [Readiness](#readiness). |
 | A provider shows `not_configured` with a token present | That account has not connected it on that profile. Check with `scripts/provision_keyring.py --check`. |
 | A provider shows `unauthorized` | Reachable, but it rejected the stored credential — usually a key stored under the wrong header. Re-run the provisioning script, which sets it correctly. |
 | A provider shows `unreachable` | It timed out, refused the connection or errored within `WSA_PROVIDER_PROBE_TIMEOUT_SECONDS`. |
@@ -258,5 +263,5 @@ What remains your problem:
 | Jobs vanish after a restart | Expected — the job store is in-memory. |
 | Polling a job id returns `404` | It expired after `WSA_JOB_RETENTION_SECONDS`, was evicted once `WSA_MAX_STORED_JOBS` was reached, or the client reached a different replica than the one it submitted to. |
 | Summaries cover less than the page | Truncation, always reported: `truncated`, `chars_submitted` and `original_chars` say exactly how much the model saw. |
-| The browser fails to launch | Playwright's bundled Chromium does not match the installed browser, which is common in containers. Set `WSA_BROWSER_EXECUTABLE_PATH`. |
+| The browser fails to launch | Playwright's bundled Chromium does not match the installed browser, which is common in containers. Set `WSA_BROWSER_EXECUTABLE_PATH`, or build the image from the Dockerfile, whose base tag `tests/test_dockerfile_playwright.py` keeps equal to the locked Playwright. |
 | Logs are not JSON despite `WSA_JSON_LOGS=true` | The process was started before the setting was applied; logging is configured in `create_app`. Restart. |
