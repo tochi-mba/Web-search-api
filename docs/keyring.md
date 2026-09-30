@@ -69,8 +69,12 @@ export ANTHROPIC_API_KEY=... GROQ_API_KEY=...
 uv run python scripts/provision_keyring.py --profile personal
 ```
 
-`--print` shows the curl commands without running them, `--check` reports what
-is already connected, and `--only anthropic groq` limits the run.
+The script stores whichever keys it finds in its own environment, one variable per
+provider: `ANTHROPIC_API_KEY`, `SERPER_API_KEY`, and `<KEY>_API_KEY` for any other
+provider key (`GROQ_API_KEY`, `LAMBDA_AI_API_KEY`). Keys it does not find are skipped.
+`--print` shows the curl commands without running them, `--check` reports what is
+already connected, `--only anthropic groq` limits the run, and `--base-url` (or
+`KEYRING_BASE_URL`) points it at a keyring other than `http://127.0.0.1:8001`.
 
 ### 4. Call the API
 
@@ -155,8 +159,9 @@ Worth knowing before you depend on it:
 
 ## Shared verification and configuration changes
 
-Token verification uses `keyring-client` from the sibling `Keyring-api/clients/python`
-checkout. Install the family together while the client is unreleased. Keys are fetched
+Token verification uses `keyring-client`, taken from the Keyring-api repository as a
+tagged git source (see `[tool.uv.sources]` in `pyproject.toml`); `make install` fetches
+it, and no sibling checkout is needed. Keys are fetched
 lazily, refreshes are rate limited, and cached keys survive a bounded outage. A failed
 verification exposes one refusal message; HTTP exceptions and JWT diagnostics stay out
 of responses.
