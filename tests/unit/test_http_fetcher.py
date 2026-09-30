@@ -154,3 +154,55 @@ async def test_connection_errors_surface_as_upstream_errors(fetcher):
 async def test_private_url_is_rejected_before_any_request(fetcher):
     with pytest.raises(ForbiddenUrlError):
         await fetcher.fetch("https://internal.test/admin")
+
+
+def counted_chunks(pulled, *, chunks, size):
+    """A body the test can see being read, one chunk at a time."""
+
+    async def body():
+        for _ in range(chunks):
+            pulled.append(size)
+            yield b"x" * size
+
+    return body()
+
+
+@respx.mock
+async def test_reading_stops_at_the_size_cap(fetcher):
+    pulled: list[int] = []
+    respx.get("https://example.com/huge").mock(
+        return_value=httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            content=counted_chunks(pulled, chunks=100, size=400),
+        )
+    )
+    result = await fetcher.fetch("https://example.com/huge")
+    assert len(result.body) == 1000
+    assert sum(pulled) < 2000
+
+
+@respx.mock
+async def test_a_body_exactly_at_the_cap_is_returned_whole(fetcher):
+    pulled: list[int] = []
+    respx.get("https://example.com/exact").mock(
+        return_value=httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            content=counted_chunks(pulled, chunks=2, size=500),
+        )
+    )
+    assert len((await fetcher.fetch("https://example.com/exact")).body) == 1000
+
+
+@respx.mock
+async def test_a_connection_lost_mid_body_surfaces_as_an_upstream_error(fetcher):
+    async def body():
+        yield b"<p>partial"
+        raise httpx.ReadError("reset")
+
+    respx.get("https://example.com/cut").mock(
+        return_value=httpx.Response(200, headers={"content-type": "text/html"}, content=body())
+    )
+    with pytest.raises(UpstreamError, match="Fetch failed"):
+        await fetcher.fetch("https://example.com/cut")

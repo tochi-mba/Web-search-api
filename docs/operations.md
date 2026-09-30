@@ -115,7 +115,7 @@ is a different answer for different people. See
 | --- | --- | --- |
 | `WSA_REQUEST_TIMEOUT_SECONDS` | `20.0` | Per page fetch and per search backend call. LLM adapters get three times this, because generation is slower than fetching. `>0`. |
 | `WSA_MAX_REDIRECTS` | `5` | Redirect budget per fetch. Every hop is re-checked by the SSRF guard. `≥0`. |
-| `WSA_MAX_RESPONSE_BYTES` | `5000000` | Body bytes kept; anything beyond is discarded and the truncation logged. `>0`. |
+| `WSA_MAX_RESPONSE_BYTES` | `5000000` | Body bytes read; the rest is never downloaded, and the truncation is logged. `>0`. |
 | `WSA_USER_AGENT` | a Chrome 131 string | Sent on page fetches, on robots.txt, and by browser contexts. |
 | `WSA_RESPECT_ROBOTS` | `true` | Honour robots.txt. Fetched once per host and cached for an hour. |
 | `WSA_ALLOW_PRIVATE_NETWORKS` | `false` | Permit private and loopback addresses, for deployments crawling their own infrastructure. **Cloud metadata hosts stay blocked even then.** |

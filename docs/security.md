@@ -51,11 +51,10 @@ then**, because there is no legitimate reason for this service to read them.
 | Global concurrency | `WSA_MAX_CONCURRENCY` (8) |
 | robots.txt | `WSA_RESPECT_ROBOTS` (true) |
 
-Two of these bound less than their names suggest. The size setting trims the body after
-it has been read, so it limits what is parsed and summarised, not what is downloaded or
-held in memory; a slow or huge response is bounded by the timeout instead. The
-content-type check also runs on the complete response. There is no per-host concurrency
-limit.
+The body is streamed, and reading stops once the size setting is passed, so it bounds
+what is downloaded and held in memory as well as what is parsed and summarised. The
+status and content-type checks run on the headers, before any of the body is read. There
+is no per-host concurrency limit.
 
 ## Prompt injection
 

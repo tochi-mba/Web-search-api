@@ -57,6 +57,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A fetched body is streamed and reading stops at `WSA_MAX_RESPONSE_BYTES`. It used to be
+  read whole and trimmed afterwards, so the cap bounded what was parsed but not what was
+  downloaded or held in memory.
 - A 500 response carries `X-Request-ID` like every other response. Starlette renders
   unhandled errors outside the user middleware, so the context middleware never stamped it.
 - Bind Serper to each request's caller so connected accounts can use the search backend.
