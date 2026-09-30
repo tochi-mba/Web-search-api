@@ -153,7 +153,7 @@ enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 module = ["selectolax.*", "playwright.*"]
 ignore_missing_imports = true
 
-# Media-tool types tests strictly. Doing the same here is 1,200+ missing
+# Tests are not held to strict typing yet: doing so here is 1,200+ missing
 # annotations on fixtures and helpers; that is a dedicated pass, not this one.
 # Tests stay type-checked for the calls they make.
 [[tool.mypy.overrides]]
