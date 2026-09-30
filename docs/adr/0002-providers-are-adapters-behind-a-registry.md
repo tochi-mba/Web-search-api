@@ -4,17 +4,17 @@
 
 ## Context
 
-This service summarises with whichever model the caller asks for, across roughly sixty
+This service summarises with whichever model the caller asks for, across more than fifty
 providers. Two questions had to be answered together, because the obvious answer to each
 makes the other worse.
 
-**How many adapters?** One class per vendor is sixty classes, sixty sets of tests, and a
+**How many adapters?** One class per vendor is fifty-odd classes, fifty-odd sets of tests, and a
 100% coverage gate that nobody can hold up.
 
 **Where do credentials live?** The obvious version is an API key per provider in this
 service's environment — `WSA_OPENAI_API_KEY`, `WSA_GROQ_API_KEY`, and so on down the list.
 That is what this service did before keyring existed. It means every caller shares one
-identity, one person's key pays for another person's request, and sixty third-party secrets
+identity, one person's key pays for another person's request, and fifty-odd third-party secrets
 sit in one process's environment.
 
 ## Decision
@@ -68,7 +68,7 @@ different people.
 
 **Building one costs a keyring call per credentialed provider.** Keyring's internal API has
 no "list this account's connections" endpoint, so availability is discovered by asking. The
-short-circuit for an unconnected provider is what keeps a sixty-provider sweep cheap: it
+short-circuit for an unconnected provider is what keeps a fifty-provider sweep cheap: it
 never touches the provider at all, and for most people most providers are unconnected.
 
 **Keyring being down means no credentialed provider works.** There is no environment
@@ -81,8 +81,8 @@ This service still handles credentials in flight — it must, to attach them to 
 call. It never stores or logs them, and keyring returns *what to attach* rather than what it
 holds, so a refresh token never arrives here at all.
 
-Adding a vendor is one row and no new test: the parameterised sweep runs every row against a
-mock OpenAI-compatible server, which is what makes a 100% gate tractable across this many
+Adding a vendor is one row and no new test: the parameterised sweep runs every row against
+mocked OpenAI-compatible endpoints, which is what makes a 100% gate tractable across this many
 vendors and what fails CI on a malformed row.
 
 ## What would change this

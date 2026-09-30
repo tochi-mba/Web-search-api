@@ -35,16 +35,16 @@ matter — truncation never exceeds its limit, cleaning is idempotent.
 `respx` intercepts `httpx` at the transport layer. Covers success, 401, 429,
 500, timeout, connection failure and malformed JSON for every client.
 
-### The Anthropic and OpenAI SDKs
+### The Anthropic SDK
 
-These SDKs are built on **`httpx2`**, which `respx` cannot patch. Two options:
-stub the SDK methods, or run a real server.
+The `anthropic` SDK is built on **`httpx2`**, which `respx` cannot patch. Two
+options: stub the SDK methods, or run a real server.
 
 We run a real server (`tests/mock_api_server.py`): a recording
 `ThreadingHTTPServer` that serves queued responses and captures the exact
 request. The SDK's `base_url` points at it.
 
-This matters because the entire reason those adapters exist is request shaping.
+This matters because the entire reason that adapter exists is request shaping.
 A test that stubs `messages.create()` and asserts on the kwargs proves the test
 harness works. A test that reads the JSON body off a socket proves Opus 5 got
 `thinking: {"type": "adaptive"}` and Haiku 4.5 got `budget_tokens`.
@@ -64,11 +64,11 @@ Marked `@pytest.mark.browser` and included in the default run.
 
 ### The provider fleet
 
-One parametrised test runs **every** row of `PROVIDER_SPECS` against a mock
-OpenAI-compatible server, asserting each can probe, list models and chat, and
-that each spec is well formed. Adding a provider is covered automatically;
-a malformed row fails CI. This is what makes a 100% gate tractable across ~50
-vendors.
+Parametrised tests in `tests/unit/test_openai_compatible.py` run **every** row of
+`OPENAI_COMPATIBLE_SPECS` against `respx` routes standing in for a compliant server,
+asserting each can list models and chat, and that each spec is well formed. Adding a
+provider is covered automatically; a malformed row fails CI. This is what makes a 100%
+gate tractable across 52 vendors.
 
 ### Endpoints
 

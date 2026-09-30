@@ -1,9 +1,9 @@
 # web-search-api
 
 A FastAPI service that scrapes Google search results and web pages, then
-synthesises an **executive summary** with any of ~60 LLM providers — local
-Ollama, every Anthropic and OpenAI model, and the whole OpenAI-compatible
-ecosystem.
+synthesises an **executive summary** with any of 54 LLM providers — local
+Ollama, every Anthropic and OpenAI model, and 51 more that speak OpenAI's wire
+format.
 
 API only. No UI. Designed to sit behind an MCP server.
 
@@ -132,19 +132,24 @@ models, so anything listed can actually be used:
       "id": "anthropic:claude-opus-5",
       "provider": "anthropic",
       "model": "claude-opus-5",
+      "display_name": "Claude Opus 5",
       "context_window": 1000000,
+      "max_output_tokens": 128000,
       "capabilities": {
         "supports_temperature": false,
         "supports_json_mode": true,
+        "supports_streaming": true,
         "reasoning": "adaptive_thinking",
         "max_tokens_param": "max_tokens"
       }
     }
   ],
   "providers": [
-    {"name": "anthropic", "status": "available",    "model_count": 9},
-    {"name": "openai",    "status": "unauthorized", "detail": "invalid api key"},
-    {"name": "groq",      "status": "not_configured"}
+    {"name": "anthropic", "status": "available", "detail": "", "model_count": 9},
+    {"name": "openai", "status": "unauthorized", "detail": "invalid api key",
+     "model_count": 0},
+    {"name": "groq", "status": "not_configured",
+     "detail": "No credential for this caller in keyring.", "model_count": 0}
   ]
 }
 ```
@@ -283,8 +288,8 @@ make run       # dev server with reload
 
 Test coverage is enforced at **100%** (`fail_under = 100`). See
 [`docs/testing.md`](docs/testing.md) for how each layer is tested — including
-why the Anthropic and OpenAI adapters run against a real local HTTP server
-rather than `respx`, and why browser tests never touch Google.
+why the Anthropic adapter runs against a real local HTTP server rather than
+`respx`, and why browser tests never touch Google.
 
 Further reading:
 
