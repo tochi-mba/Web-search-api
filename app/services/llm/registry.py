@@ -153,6 +153,22 @@ class ModelRegistry:
         """Keys of every registered provider."""
         return list(self._providers)
 
+    def credentialed_provider_names(self, disabled_providers: Iterable[str] = ()) -> list[str]:
+        """Providers a caller who brings a credential could use, without probing any.
+
+        An anonymous catalogue reports every one of these as ``not_configured``, because it
+        carries nobody's credential. Each has an endpoint and needs a credential, and this
+        deployment has a keyring to resolve one from.
+        """
+        if self._keyring is None or not self._keyring.is_configured:
+            return []
+        disabled = frozenset(disabled_providers)
+        return [
+            name
+            for name, provider in self._providers.items()
+            if name not in disabled and provider.requires_credential and provider.is_configured()
+        ]
+
     async def catalog(
         self,
         caller: Caller | None = None,

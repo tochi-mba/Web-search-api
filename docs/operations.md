@@ -168,18 +168,21 @@ secret.
 
 - **browser** — whether a browser *could* be launched, not whether one is running. The
   browser starts lazily on first use.
-- **llm** — whether an anonymous probe found any provider configured, with how many of
-  them answered without a credential and how many models it could list.
+- **llm** — whether any provider could serve somebody: how many credential-free runtimes
+  an anonymous probe found configured, how many of them answered and how many models it
+  could list, and how many providers are usable with a caller's credential.
 
-The probe acts for nobody, so it carries no credential. A provider that needs one reports
-`not_configured` to it and does not count. What counts is a credential-free runtime with a
-base URL, whether or not anything is listening there, and Ollama's default URL means a
-stock deployment always has one. Requiring a reachable *model* instead would report a
-healthy cloud-only deployment as permanently unready; whether one caller's credential
-works is answered per request, not by a probe. The consequence to know: a deployment
-that disables every local runtime answers `503` here even though callers who bring a
-credential are served. A settings-api outage does not fail it either: it
-applies no person's disabled-provider list, so there is nothing to guess at.
+Two kinds of provider count. A credential-free runtime counts when it has a base URL,
+whether or not anything is listening there; Ollama's default URL means a stock deployment
+always has one. A provider that needs a credential counts when it has a base URL, is not
+disabled, and `WSA_KEYRING_BASE_URL` and `WSA_KEYRING_SERVICE_TOKEN` are set so a
+caller's credential can be resolved; its endpoint is not called. So a cloud-only
+deployment, every local runtime turned off, is ready as long as keyring is configured.
+Requiring a reachable *model* would report it as permanently unready; whether one caller's
+credential works is answered per request, not by a probe. In anonymous mode (keyring
+unset) only credential-free runtimes count, because nothing else can serve anybody. A
+settings-api outage does not fail the probe either: it applies no person's
+disabled-provider list, so there is nothing to guess at.
 
 ## Deploying
 
@@ -254,7 +257,7 @@ What remains your problem:
 | A token gets `503` saying keyring is not configured | A user token arrived at a deployment in anonymous mode. Set both keyring variables, or stop sending a token. |
 | `503` naming keyring unreachable | Keyring's signing keys cannot be fetched. Cached keys survive a bounded outage; a cold start does not. |
 | `/ready` is `503`, `browser` says "playwright expects a browser at …, which is not there" | No Chromium to launch. Install the build this Playwright wants, or point `WSA_BROWSER_EXECUTABLE_PATH` at one. Checked once at startup, so restart afterwards. |
-| `/ready` is `503`, `llm` says "no provider configured" | The anonymous probe found no credential-free runtime with a base URL: every local runtime is disabled or set to `""` in `WSA_PROVIDER_BASE_URLS`. Providers that need a credential never count here. See [Readiness](#readiness). |
+| `/ready` is `503`, `llm` says "no provider configured" | No provider could serve anybody: every local runtime is disabled or set to `""` in `WSA_PROVIDER_BASE_URLS`, and either keyring is not configured or every provider that needs a credential is disabled too. See [Readiness](#readiness). |
 | A provider shows `not_configured` with a token present | That account has not connected it on that profile. Check with `scripts/provision_keyring.py --check`. |
 | A provider shows `unauthorized` | Reachable, but it rejected the stored credential — usually a key stored under the wrong header. Re-run the provisioning script, which sets it correctly. |
 | A provider shows `unreachable` | It timed out, refused the connection or errored within `WSA_PROVIDER_PROBE_TIMEOUT_SECONDS`. |
