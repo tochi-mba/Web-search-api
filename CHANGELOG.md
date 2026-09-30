@@ -6,17 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
-### Changed
-
-- **Breaking:** the floor is now **Python 3.12** (CI runs 3.12 and 3.13).
-  `.python-version`, `requires-python`, ruff's `target-version`, mypy's `python_version`,
-  the Docker base image and the pre-commit interpreter all moved together, and `uv.lock`
-  was regenerated. The family-wide reason is in the meta-repo's
-  [ADR-0008](https://github.com/tochi-mba/LUCY-assistant/blob/main/docs/adr/0008-python-3-12-floor.md):
-  `weftai`, which the assistant hub depends on, requires 3.12 and uses PEP 695 type
-  parameters that do not parse on 3.11. Generics here moved to PEP 695 syntax with it.
 ### Added
 
+- The service: `POST /v1/search` scrapes Google results (failing over to SearxNG and
+  Serper when Google refuses), `POST /v1/scrape` fetches pages, rendering them in headless
+  Chromium when they need it, and `POST /v1/summarize` writes an executive summary with
+  any of the providers `GET /v1/models` lists. Fetches go through an SSRF guard that
+  re-validates every redirect hop and honour robots.txt. Batch endpoints answer `200` with
+  a per-item status; errors are RFC 9457 problem+json.
+- Background jobs: `"background": true` on search, scrape or summarize answers `202`
+  with a job to poll at `GET /v1/jobs/{id}`; `GET /v1/jobs` lists them and `DELETE`
+  cancels one. Background and synchronous requests run the same pipeline.
+- `GET /v1/jobs/{id}?wait_seconds=` (0-60) holds the request open until the job finishes,
+  so a caller need not poll in a loop.
+- `docs/mcp.md`: what a model may call through this service and how results are framed.
 - Optional per-person settings from settings-api (namespace `search`), off by
   default. `WSA_SETTINGS_API_BASE_URL` and `WSA_SETTINGS_API_TOKEN` are both or
   neither. When set, each caller gets their own default model, content ceiling,
@@ -35,9 +38,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Breaking:** the floor is now **Python 3.12** (CI runs 3.12 and 3.13).
+  `.python-version`, `requires-python`, ruff's `target-version`, mypy's `python_version`,
+  the Docker base image and the pre-commit interpreter all moved together, and `uv.lock`
+  was regenerated. The family-wide reason is in the meta-repo's
+  [ADR-0008](https://github.com/tochi-mba/LUCY-assistant/blob/main/docs/adr/0008-python-3-12-floor.md):
+  `weftai`, which the assistant hub depends on, requires 3.12 and uses PEP 695 type
+  parameters that do not parse on 3.11. Generics here moved to PEP 695 syntax with it.
+- **Breaking:** every credential comes from keyring, per caller. Provider keys and the
+  Serper key are no longer read from the environment; each request resolves the caller's
+  own, so `GET /v1/models` lists the providers that account has connected. User tokens
+  are verified locally against keyring's JWKS. Background jobs resolve the credential at
+  submit time. `scripts/provision_keyring.py` stores each vendor's key under the header
+  it expects.
+- The service listens on its family port, `8006`, and the image runs as the unprivileged
+  `pwuser`. `/healthy` is liveness and does no I/O.
+- keyring-client and settings-client come from their repositories' tags, so a clone, a
+  CI job or an image build needs no sibling checkout. CI calls the family's shared
+  service workflow.
 - Image startup uses its installed dependencies without synchronizing or downloading development tools.
 - The image copies `uv.lock`, builds frozen, and healthchecks `/healthy`.
-
 - CI gets a short-lived token from the family token broker over OIDC (`id-token: write`)
   rather than inheriting a shared credential; image builds accept a BuildKit
   `github_token` secret so tagged client packages can be fetched from private family
@@ -66,6 +86,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- robots.txt is fetched again once the cached copy is an hour old. It used to be cached
+  for the life of the process, so a site that began refusing crawlers went on being
+  crawled until a restart.
+- The image's Playwright base matches the locked Playwright, and a test keeps them equal.
+  They had drifted, so there was no browser to launch while `/ready` still said there
+  was: the browser check now looks for the executable and reports its path.
+- Documentation checked against the code: the API-key header, what `/ready` answers, every
+  problem code, the provider count, the fetch and request limits, every setting in
+  `.env.example`, how to get a Chromium, and where keyring-client comes from.
 - The package description and the OpenAPI summary said "~60 LLM providers"; there are 54.
   The summary now derives the number from what bootstrap builds, and a test holds
   `pyproject.toml`, `README.md` and `AGENTS.md` to it.
