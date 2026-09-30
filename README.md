@@ -296,8 +296,11 @@ why the Anthropic adapter runs against a real local HTTP server rather than
 
 Further reading:
 
+- [`docs/api.md`](docs/api.md) — every route, its limits, and every problem code
 - [`docs/keyring.md`](docs/keyring.md) — where credentials live and how to set them up
+- [`docs/mcp.md`](docs/mcp.md) — fronting the API as MCP tools, and the rule that comes first
 - [`AGENTS.md`](AGENTS.md) — conventions and how to extend the codebase
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — setup, the test-first loop, commits
 - [`docs/architecture.md`](docs/architecture.md) — how a request flows through
 - [`docs/operations.md`](docs/operations.md) — every setting, deploying, and what each failure means
 - [`docs/providers.md`](docs/providers.md) — adding a provider (one table row)

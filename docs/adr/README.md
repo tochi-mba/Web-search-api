@@ -11,8 +11,9 @@ decided, what it cost, and what would change the answer.
 | [0004](0004-local-jwks-verification.md) | Tokens are verified locally against keyring's published keys | Accepted |
 
 Family-wide decisions — the shared client libraries, `Authorization: Bearer` as the
-canonical identity header, the port assignments — live in the meta repository's `docs/adr/`
-and are linked from here rather than restated.
+canonical identity header, the port assignments — live in the meta repository's
+[`docs/adr/`](https://github.com/tochi-mba/LUCY-assistant/tree/main/docs/adr) rather than
+being restated here.
 
 ## Writing one
 
