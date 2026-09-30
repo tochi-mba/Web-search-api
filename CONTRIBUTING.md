@@ -11,7 +11,10 @@ uv run pre-commit install
 make check               # confirm a clean checkout is green before you change anything
 ```
 
-The default suite needs no credentials and no network. The browser tests need Chromium:
+The default suite needs no credentials and no network. It does include the browser tests,
+which need a Chromium. If none is installed at `WSA_BROWSER_EXECUTABLE_PATH` or a
+well-known system path ([docs/testing.md](docs/testing.md#playwright) lists them), fetch
+the build Playwright expects:
 
 ```bash
 uv run playwright install chromium

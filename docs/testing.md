@@ -4,7 +4,7 @@ Coverage is enforced at **100%** (`fail_under = 100`). That is only sustainable
 because the design keeps I/O at the edges and injects collaborators.
 
 ```bash
-make check          # format, lint, types, tests with the coverage gate
+make check          # format and lint, strict types, import contracts, tests at 100%
 make test           # tests only
 uv run pytest -m browser              # real Chromium tests
 uv run pytest --cov=app --cov-report=term-missing
@@ -56,11 +56,14 @@ same HTML fixtures the parser unit tests use. That covers navigation, resource
 blocking and context lifecycle for real, with no network flakiness and no
 dependence on Google's current markup.
 
-Marked `@pytest.mark.browser` and included in the default run.
-
-> In this container, Playwright's bundled Chromium build does not match the
-> installed browser. `resolve_executable_path()` discovers the system Chromium
-> at `/opt/pw-browsers/chromium`. Do not run `playwright install`.
+Marked `@pytest.mark.browser` and included in the default run, so `make check`
+needs a Chromium. `resolve_executable_path()` looks for one in this order:
+`WSA_BROWSER_EXECUTABLE_PATH`, then `/opt/pw-browsers/chromium`, `/usr/bin/chromium`,
+`/usr/bin/chromium-browser` and `/usr/bin/google-chrome`, then the build Playwright
+downloaded for itself. On a machine with none of those, run
+`uv run playwright install chromium` once. Where a system Chromium already exists
+at one of those paths, it is used and nothing needs installing. CI also runs the
+browser tests on their own, with `pytest -m browser`, after installing Chromium.
 
 ### The provider fleet
 
@@ -79,7 +82,7 @@ per-item error codes, validation rejections and problem+json rendering.
 ## Fixtures
 
 `tests/fixtures/html/` holds saved HTML: an article with metadata and
-boilerplate, a minimal page, an empty page, and four Google SERP variants —
+boilerplate, a minimal page, an empty page, and five Google SERP variants —
 modern layout, legacy layout, consent wall, CAPTCHA interstitial, no results.
 
 These fixtures are the honest record of the markup the parser expects. When
@@ -88,12 +91,22 @@ Google changes, update the fixture and the parser in the same commit.
 ## What is deliberately not tested here
 
 Live LLM calls and live Google scraping cost money and depend on third parties.
-They belong in a manual smoke run with real keys:
+They belong in a manual run against a real server:
 
 ```bash
-export ANTHROPIC_API_KEY=...
-make run
-curl -s localhost:8006/v1/models | jq '.default_model, .providers'
-curl -s -X POST localhost:8006/v1/scrape -H 'content-type: application/json' \
-  -d '{"urls":["https://example.com"]}' | jq
+make run                                                   # in one shell
+uv run python scripts/smoke.py --model ollama:llama3.1:8b  # in another
+```
+
+`scripts/smoke.py` checks health and readiness, lists models, then summarises, scrapes
+and searches once each. It sends no user token, so it can only use a credential-free
+runtime such as a local Ollama; a provider key in the environment does nothing, because
+this service never reads one. To try a credentialed provider, set up keyring as in
+[keyring.md](keyring.md) and send the user token yourself:
+
+```bash
+curl -s localhost:8006/v1/models -H "Authorization: Bearer $USER_TOKEN" \
+  | jq '.default_model, .providers'
+curl -s -X POST localhost:8006/v1/scrape -H "Authorization: Bearer $USER_TOKEN" \
+  -H 'content-type: application/json' -d '{"urls":["https://example.com"]}' | jq
 ```

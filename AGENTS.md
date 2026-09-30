@@ -145,8 +145,12 @@ When Google changes its markup, update the fixture and the parser together.
 - **`filterwarnings = ["error"]`** is set. A leaked socket or an unawaited
   coroutine fails the suite rather than printing a warning.
 - **Playwright's bundled Chromium may not match the installed browser.**
-  `resolve_executable_path()` finds a system Chromium; in this container that is
-  `/opt/pw-browsers/chromium`. Never run `playwright install` here.
+  `resolve_executable_path()` prefers `WSA_BROWSER_EXECUTABLE_PATH`, then a system
+  Chromium at a well-known path such as `/opt/pw-browsers/chromium`. Where one of
+  those exists, use it rather than running `playwright install`; elsewhere
+  `uv run playwright install chromium` fetches the build Playwright expects. The
+  image pins its base tag to the locked Playwright, and
+  `tests/test_dockerfile_playwright.py` keeps the two equal.
 - **An empty string disables a provider**; `None` means "not specified, use the
   default". This applies to both `api_key` and `base_url`.
 - **`asyncio.create_task` results must be referenced.** A task held only by the
