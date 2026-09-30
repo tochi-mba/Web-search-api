@@ -10,7 +10,6 @@ from __future__ import annotations
 from app.services.llm.capabilities import (
     CapabilityRule,
     MaxTokensParam,
-    ModelCapabilities,
     ReasoningStyle,
     _rule,
 )
@@ -178,6 +177,3 @@ CAPABILITY_RULES: tuple[CapabilityRule, ...] = (
         max_output_tokens=4_096,
     ),
 )
-
-#: Exposed for tests and documentation.
-DEFAULT_CAPABILITIES = ModelCapabilities()

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Iterable
 from typing import TypeVar
-from urllib.parse import urlsplit
 
 T = TypeVar("T")
 
@@ -34,21 +33,3 @@ async def bounded_gather[T](
             return await factory()
 
     return list(await asyncio.gather(*(run(factory) for factory in factories)))
-
-
-class HostLimiter:
-    """Per-host semaphores, so one batch cannot hammer a single origin."""
-
-    def __init__(self, limit_per_host: int) -> None:
-        """Create a limiter allowing ``limit_per_host`` concurrent calls per host."""
-        self._limit = limit_per_host
-        self._semaphores: dict[str, asyncio.Semaphore] = {}
-
-    def for_url(self, url: str) -> asyncio.Semaphore:
-        """Return the semaphore guarding the host of ``url``."""
-        host = urlsplit(url).netloc.lower()
-        semaphore = self._semaphores.get(host)
-        if semaphore is None:
-            semaphore = asyncio.Semaphore(self._limit)
-            self._semaphores[host] = semaphore
-        return semaphore

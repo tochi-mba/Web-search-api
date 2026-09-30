@@ -4,14 +4,7 @@ from __future__ import annotations
 
 from app.schemas.common import ErrorPayload
 from app.schemas.jobs import JobAccepted, JobOut
-from app.schemas.summary import SummaryOut
 from app.services.jobs.base import Job
-from app.services.llm.summarizer import Summary
-
-
-def to_summary_out(summary: Summary) -> SummaryOut:
-    """Render an internal :class:`Summary` as its API representation."""
-    return summary.as_out()
 
 
 def to_job_out(job: Job) -> JobOut:
