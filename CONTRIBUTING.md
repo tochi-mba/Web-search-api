@@ -40,10 +40,13 @@ module that reaches for the driver directly fails `make imports` rather than rev
 
 ## Providers
 
-A provider is an adapter with a recipe, not a special case in the router. Adding one means
-a module under `app/services/`, an entry in the registry, and tests that cover both the
-answer and the refusal. A provider that needs a credential resolves it per caller from
-keyring — never from this service's own configuration.
+A provider is an adapter with a recipe, not a special case in the router. One that speaks
+OpenAI's wire format is a single row in `app/services/llm/specs.py`, and the parametrised
+sweep tests it with no new test file. One whose API genuinely differs is a module under
+`app/services/llm/providers/`, registered in `bootstrap.build_llm_providers`, with tests
+that cover both the answer and the refusal. [docs/providers.md](docs/providers.md) has
+both paths. A provider that needs a credential resolves it per caller from keyring —
+never from this service's own configuration.
 
 ## Commits
 

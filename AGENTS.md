@@ -5,7 +5,7 @@ Conventions and context for anyone — human or agent — working in this reposi
 ## What this is
 
 A FastAPI service that scrapes Google search results and web pages and
-synthesises executive summaries using any of ~60 LLM providers. API only, no UI,
+synthesises executive summaries using any of 54 LLM providers. API only, no UI,
 intended to sit behind an MCP server.
 
 ## Non-negotiables
@@ -84,10 +84,13 @@ tests/
 ### Add an LLM provider
 
 If it speaks OpenAI's wire format — most do — it is **one row** in
-`app/services/llm/specs.py`:
+`OPENAI_COMPATIBLE_SPECS` in `app/services/llm/specs.py`:
 
 ```python
-(_spec("acme", "Acme AI", "https://api.acme.ai/v1"),)
+OPENAI_COMPATIBLE_SPECS: tuple[ProviderSpec, ...] = (
+    # ... the existing rows, grouped by kind ...
+    _spec("acme", "Acme AI", "https://api.acme.ai/v1"),
+)
 ```
 
 That is the whole change. The provider key doubles as the keyring service name,
@@ -122,10 +125,10 @@ when the engine refuses to serve results so the router fails over.
 |---|---|
 | Pure logic (cleaner, truncator, parser, capabilities) | Direct unit tests, plus hypothesis for invariants |
 | HTTP clients (`httpx`) | `respx` transport mocks |
-| Anthropic / OpenAI SDKs | **A real local HTTP server** (`tests/mock_api_server.py`) — those SDKs run on `httpx2`, which `respx` cannot patch. Stubbing SDK methods would test the mocks, not the request shaping. |
+| Anthropic SDK | **A real local HTTP server** (`tests/mock_api_server.py`) — the SDK runs on `httpx2`, which `respx` cannot patch. Stubbing SDK methods would test the mocks, not the request shaping. The OpenAI-compatible adapter is plain `httpx`, so it uses `respx`. |
 | Playwright | Real headless Chromium against a **local fixture server**, never Google |
 | Endpoints | `httpx.ASGITransport` with fakes injected through `deps` |
-| The provider fleet | One parametrised sweep over `PROVIDER_SPECS` |
+| The provider fleet | One parametrised sweep over `OPENAI_COMPATIBLE_SPECS` |
 | Keyring | `tests/fake_keyring.py` — **real** RS256 signing and a real JWKS, because verification is a security control and a stubbed verifier proves only that the stub works |
 
 Google SERP fixtures live in `tests/fixtures/html/` and cover the modern layout,
