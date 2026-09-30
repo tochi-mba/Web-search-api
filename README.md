@@ -8,7 +8,7 @@ format.
 API only. No UI. Designed to sit behind an MCP server.
 
 ```bash
-make install                      # uv sync --all-extras
+make install                      # uv sync --all-extras --group dev
 cp .env.example .env              # point it at your keyring
 make run                          # http://localhost:8006/docs
 ```
@@ -247,7 +247,9 @@ that, not the primary one.
 
 ## Configuration
 
-Every value is optional — see `.env.example` for the full list.
+Every value is optional. These are the ones most deployments touch;
+[docs/operations.md](docs/operations.md#configuration) lists every one, and
+`.env.example` is a starting file with each of them in it.
 
 | Variable | Default | Purpose |
 |---|---|---|

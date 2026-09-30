@@ -102,6 +102,7 @@ scrape that never summarises still runs.
 | `WSA_PROVIDER_PROBE_TIMEOUT_SECONDS` | `5.0` | Per-provider deadline while building a catalogue. A slow provider drops out; it does not hold up the rest. `>0`. |
 | `WSA_MAX_CONTENT_CHARS` | `40000` | Hard ceiling on scraped text handed to a model. The effective limit is the smaller of this and the model's context budget. `>0`. |
 | `WSA_PROVIDER_BASE_URLS` | `{}` | JSON object keyed by provider, e.g. `{"ollama":"http://gpu:11434"}`. An explicit `""` disables that provider; omitting a key means "use the default". |
+| `OLLAMA_BASE_URL` | *(unset)* | No `WSA_` prefix. Ollama's URL when `WSA_PROVIDER_BASE_URLS` has no `ollama` key; `http://localhost:11434` when this is unset too. |
 | `WSA_DISABLED_PROVIDERS` | *(empty)* | Comma-separated provider keys that are never probed and never used. A person may add to this list, never subtract from it. |
 
 `GET /v1/models` reports what responded to a live probe **for the caller who asked**, so it
