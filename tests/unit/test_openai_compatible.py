@@ -19,7 +19,6 @@ from app.services.llm.base import ChatMessage, ChatRequest
 from app.services.llm.providers.openai_compatible import OpenAICompatibleProvider, _as_int
 from app.services.llm.specs import (
     OPENAI_COMPATIBLE_SPECS,
-    SPECS_BY_KEY,
     AuthStyle,
     ProviderSpec,
 )
@@ -447,7 +446,8 @@ def test_as_int_coercion(value, expected):
 
 
 def test_every_spec_key_is_unique():
-    assert len(SPECS_BY_KEY) == len(OPENAI_COMPATIBLE_SPECS)
+    keys = [spec.key for spec in OPENAI_COMPATIBLE_SPECS]
+    assert len(set(keys)) == len(keys)
 
 
 @pytest.mark.parametrize("spec", OPENAI_COMPATIBLE_SPECS, ids=lambda s: s.key)

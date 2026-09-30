@@ -1,6 +1,6 @@
 import asyncio
 
-from app.core.concurrency import HostLimiter, bounded_gather
+from app.core.concurrency import bounded_gather
 
 
 async def test_results_preserve_input_order():
@@ -34,15 +34,3 @@ async def test_limit_is_respected():
 
 async def test_empty_input_returns_empty_list():
     assert await bounded_gather([], limit=2) == []
-
-
-def test_host_limiter_reuses_one_semaphore_per_host():
-    limiter = HostLimiter(2)
-    first = limiter.for_url("https://example.com/a")
-    second = limiter.for_url("https://EXAMPLE.com/b?q=1")
-    assert first is second
-
-
-def test_host_limiter_separates_distinct_hosts():
-    limiter = HostLimiter(2)
-    assert limiter.for_url("https://a.com/") is not limiter.for_url("https://b.com/")

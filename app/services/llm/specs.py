@@ -316,6 +316,3 @@ OPENAI_COMPATIBLE_SPECS: tuple[ProviderSpec, ...] = (
         base_url_env="DOCKER_MODEL_RUNNER_BASE_URL",
     ),
 )
-
-#: Fast lookup by provider key.
-SPECS_BY_KEY: dict[str, ProviderSpec] = {spec.key: spec for spec in OPENAI_COMPATIBLE_SPECS}
