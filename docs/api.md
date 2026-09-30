@@ -81,14 +81,14 @@ whether `temperature` will be honoured.
 | `queries[]` | required | 1–20 items |
 | `queries[].query` | required | 1–500 chars, non-blank |
 | `queries[].max_results` | `10` | 1–50 |
-| `queries[].site` | — | Adds a `site:` filter |
-| `queries[].additional_notes` | — | Overrides the batch-level notes for this query |
+| `queries[].site` | — | Adds a `site:` filter. At most 253 chars |
+| `queries[].additional_notes` | — | Replaces the batch-level notes for this query. At most 4,000 chars |
 | `fetch_pages` | `false` | Also scrape the top result pages |
 | `max_pages` | `3` | 1–10, only meaningful with `fetch_pages` |
 | `summarize` | `true` | |
 | `model` | server default | Namespaced `provider:model` |
-| `additional_notes` | — | Applied to every query in the batch |
-| `language` / `region` | `en` / `us` | |
+| `additional_notes` | — | Applied to every query that has none of its own. At most 4,000 chars |
+| `language` / `region` | `en` / `us` | At most 8 chars each |
 | `safe_search` | `true` | |
 
 Each item in `results[]` has `status` of `ok` or `error`. A failing query does
@@ -107,7 +107,7 @@ text is summarised instead. A page that cannot be fetched keeps its snippet.
 | `summarize` | `true` | |
 | `summarize_together` | `false` | One summary across all URLs instead of one each |
 | `model` | server default | |
-| `additional_notes` | — | |
+| `additional_notes` | — | At most 4,000 chars |
 
 `auto` fetches over plain HTTP and escalates to a headless browser only when the
 extracted text looks like a client-rendered shell. If rendering then fails, the
@@ -122,11 +122,14 @@ Text in, summary out — a direct hook for an MCP server or another service.
 
 | Field | Default | Notes |
 |---|---|---|
-| `text` | required | Non-empty |
+| `text` | required | Non-empty. Truncated to the model's budget like scraped text |
 | `model` | server default | |
-| `additional_notes` | — | |
-| `topic` | — | What the reader was looking for |
-| `sources[]` | `[]` | URLs listed to the model for context |
+| `additional_notes` | — | At most 4,000 chars |
+| `topic` | — | What the reader was looking for. At most 500 chars |
+| `sources[]` | `[]` | URLs listed to the model for context. At most 50 |
+
+Every request body rejects unknown fields with `422`, so a misspelt option fails
+rather than being ignored.
 
 ## Background mode
 
