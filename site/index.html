@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Web-search-api scrapes search results and web pages and synthesises an executive summary with the model provider of your choice, in batches with partial success. API only, designed to sit behind an MCP server. A REX Technologies product.">
+<meta name="robots" content="index,follow">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#080A09">
+<meta property="og:title" content="Web-search-api — search, scrape and summarise, with sources — REX Technologies">
+<meta property="og:description" content="Web-search-api scrapes search results and web pages and synthesises an executive summary with the model provider of your choice, in batches with partial success. API only, designed to sit behind an MCP server. A REX Technologies product.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tochi-mba.github.io/Web-search-api/">
+<meta name="twitter:card" content="summary">
+<link rel="canonical" href="https://tochi-mba.github.io/Web-search-api/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script>document.documentElement.classList.replace("no-js","js");</script>
+<noscript><style>@media(max-width:760px){.site-nav{display:flex!important;position:static!important;flex-direction:column}.menu-button{display:none!important}}</style></noscript>
+<title>Web-search-api — search, scrape and summarise, with sources — REX Technologies</title>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="ambient ambient-one" aria-hidden="true"></div>
+<div class="ambient ambient-two" aria-hidden="true"></div>
+
+<header class="site-header">
+  <div class="container nav-wrap">
+    <a class="brand" href="#top" aria-label="Web-search-api, by REX Technologies">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="14" cy="14" r="7"/><path d="M19.5 19.5L26 26"/></svg></span>
+      <span class="brand-lockup"><span class="brand-company">REX Technologies</span><span class="brand-name">Web-search-api</span></span>
+    </a>
+    <button class="menu-button" type="button" aria-expanded="false" aria-controls="site-nav"><span class="sr-only">Toggle navigation</span><span></span><span></span></button>
+    <nav id="site-nav" class="site-nav" aria-label="Primary navigation">
+      <a href="#how">How it works</a>
+      <a href="#api">The API</a>
+      <a href="#install">Run it</a>
+      <a href="#limits">What to know first</a>
+      <a href="#docs">Docs</a>
+      <a class="nav-github" href="https://github.com/tochi-mba/Web-search-api">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero container" id="top">
+    <div class="hero-copy">
+      <p class="eyebrow signal">Search · scrape · summarise</p>
+      <h1>Search results and pages, turned into a <span>summary</span> you can cite.</h1>
+      <p class="hero-lede">A FastAPI service that scrapes search results and web pages, then synthesises an executive summary with any of 54 model providers, from a local Ollama to the hosted ones. API only, no UI.</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="#install">Run it on your machine</a>
+        <a class="button button-secondary" href="https://github.com/tochi-mba/Web-search-api">Source on GitHub</a>
+      </div>
+      <div class="hero-meta">
+        <span>Python 3.12+</span>
+        <span>Serves on :8006</span>
+        <span>Keys stay in keyring</span>
+        <span>MIT licensed</span>
+      </div>
+    </div>
+    <pre class="console" aria-label="A search request"><code><span class="k">POST</span> /v1/search
+{
+  "queries": [
+    {"query": "widget latency causes", "max_results": 10},
+    {"query": "dispatch queue sharding", "site": "reddit.com"}
+  ],
+  "fetch_pages": true,
+  "max_pages": 3,
+  "additional_notes": "The reader is an SRE deciding whether to shard."
+}
+
+<span class="you"># one bad query never fails the batch: every item has its own status</span></code></pre>
+  </section>
+
+  <section class="trust-strip">
+    <div class="container trust-grid">
+      <div><strong>Per caller</strong><span>Provider keys are resolved per request, for the person asking.</span></div>
+      <div><strong>Partial success</strong><span>One bad URL or blocked query never fails the batch.</span></div>
+      <div><strong>Background mode</strong><span>Long work answers 202 with a job to poll, same result shape.</span></div>
+      <div><strong>Only what works</strong><span>The model list shows what is reachable for you, right now.</span></div>
+    </div>
+  </section>
+
+  <section class="section container" id="how">
+    <div class="section-heading">
+      <p class="eyebrow signal">How it works</p>
+      <h2>Three operations, one summary step, and no key of its own.</h2>
+      <p>Every third-party credential is stored in <a href="https://tochi-mba.github.io/Keyring-api/">keyring</a> and resolved per request. Local model runtimes need no credential and work without keyring at all.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <span class="step-number">01</span>
+        <h3>Search</h3>
+        <p>A batch of queries, each with its own notes and optional site filter. By default the summary is built from titles and snippets; <code>fetch_pages</code> also reads the top pages.</p>
+      </div>
+      <div class="step">
+        <span class="step-number">02</span>
+        <h3>Scrape</h3>
+        <p>A batch of URLs to clean extracted text. <code>render_js</code> is <code>auto</code>, escalating from plain HTTP to a headless browser when the page looks client-rendered, or <code>always</code>, or <code>never</code>.</p>
+      </div>
+      <div class="step">
+        <span class="step-number">03</span>
+        <h3>Summarise</h3>
+        <p>Text in, summary out, with the model you name as <code>provider:model</code>. A direct hook for an MCP server.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section container" id="api">
+    <div class="section-heading">
+      <p class="eyebrow signal">The API</p>
+      <h2>Seven routes, and interactive docs at <code>/docs</code>.</h2>
+      <p>The reference is <a href="https://github.com/tochi-mba/Web-search-api/blob/main/docs/api.md">docs/api.md</a>; the provider catalogue is <a href="https://github.com/tochi-mba/Web-search-api/blob/main/docs/providers.md">docs/providers.md</a>.</p>
+    </div>
+    <div class="feature-grid">
+      <div class="feature-card"><span class="meta">POST /v1/search</span><h3>Search</h3><p>Batch queries to results, an optional deep fetch, and a summary.</p></div>
+      <div class="feature-card"><span class="meta">POST /v1/scrape</span><h3>Scrape</h3><p>Batch URLs to clean extracted text and a summary.</p></div>
+      <div class="feature-card"><span class="meta">POST /v1/summarize</span><h3>Summarise</h3><p>Text in, summary out.</p></div>
+      <div class="feature-card"><span class="meta">GET /v1/models</span><h3>Models</h3><p>What is reachable right now, with per-model capabilities.</p></div>
+      <div class="feature-card"><span class="meta">GET /v1/jobs</span><h3>Jobs</h3><p>Poll, list and cancel work started in background mode.</p></div>
+      <div class="feature-card"><span class="meta">GET /ready</span><h3>Readiness</h3><p>200 when a browser can launch and a provider is configured; otherwise 503 naming which.</p></div>
+    </div>
+  </section>
+
+  <section class="section container" id="install">
+    <div class="section-heading">
+      <p class="eyebrow signal">Run it</p>
+      <h2>Three commands.</h2>
+      <p>You need Python 3.12 or newer and <a href="https://docs.astral.sh/uv/">uv</a>.</p>
+    </div>
+    <ol class="install-steps">
+      <li>Install.
+        <div class="command-row"><code>make install</code><button class="copy-button" type="button" data-copy="make install">Copy</button></div>
+      </li>
+      <li>Point it at your keyring.
+        <div class="command-row"><code>cp .env.example .env</code><button class="copy-button" type="button" data-copy="cp .env.example .env">Copy</button></div>
+      </li>
+      <li>Serve it; the interactive docs are at <code>/docs</code>.
+        <div class="command-row"><code>make run</code><button class="copy-button" type="button" data-copy="make run">Copy</button></div>
+      </li>
+    </ol>
+    <p class="install-note">Where provider keys live, and how they are resolved per caller, is in <a href="https://github.com/tochi-mba/Web-search-api/blob/main/docs/keyring.md">docs/keyring.md</a>.</p>
+    <p id="copy-status" class="sr-only" aria-live="polite"></p>
+  </section>
+
+  <section class="section container" id="limits">
+    <div class="section-heading">
+      <p class="eyebrow signal">What to know first</p>
+      <h2>What to know before you lean on it.</h2>
+    </div>
+    <div class="faq">
+      <details open>
+        <summary>Where do provider keys live?</summary>
+        <p>Not here. Every third-party credential is stored in keyring and resolved per request for the person the request is made for, so answers are per caller.</p>
+      </details>
+      <details>
+        <summary>What happens when a search engine blocks the request?</summary>
+        <p>That item carries its own <code>error</code> and the batch still answers 200. A page that cannot be fetched simply keeps its snippet: deep fetching is enrichment.</p>
+      </details>
+      <details>
+        <summary>Do background jobs survive a restart?</summary>
+        <p>No. Jobs live in the process that accepted them: they are lost on restart and are not visible to other replicas, so behind a load balancer a client must poll the instance it submitted to.</p>
+      </details>
+      <details>
+        <summary>Is it affiliated with a search engine or a model provider?</summary>
+        <p>No. It is independent software and is not affiliated with Google, or with any model provider it can call.</p>
+      </details>
+    </div>
+  </section>
+
+  <section class="section container" id="docs">
+    <div class="section-heading">
+      <p class="eyebrow signal">Docs</p>
+      <h2>Written for the person who has to run it.</h2>
+    </div>
+    <div class="feature-grid">
+      <a class="feature-card link" href="https://github.com/tochi-mba/Web-search-api/blob/main/docs/api.md"><h3>The HTTP contract</h3><p>Every route, field and error.</p></a>
+      <a class="feature-card link" href="https://github.com/tochi-mba/Web-search-api/blob/main/docs/providers.md"><h3>Providers</h3><p>Which model providers it can summarise with.</p></a>
+      <a class="feature-card link" href="https://github.com/tochi-mba/Web-search-api/blob/main/docs/keyring.md"><h3>Keys and keyring</h3><p>How a credential is resolved per caller.</p></a>
+      <a class="feature-card link" href="https://github.com/tochi-mba/Web-search-api/blob/main/docs/security.md"><h3>Security</h3><p>What it fetches, and what it refuses to.</p></a>
+      <a class="feature-card link" href="https://github.com/tochi-mba/Web-search-api/blob/main/docs/operations.md"><h3>Operations</h3><p>Every setting, and running it for more than one person.</p></a>
+      <a class="feature-card link" href="https://github.com/tochi-mba/Web-search-api/blob/main/docs/mcp.md"><h3>Assistant tools</h3><p>The operations as an MCP server would offer them.</p></a>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-wrap">
+    <span>© <span id="year">2026</span> REX Technologies · Web-search-api</span>
+    <span>Part of the <a href="https://tochi-mba.github.io/LUCY-assistant/">LUCY family</a>. MIT licensed. Not affiliated with Google.</span>
+    <span class="footer-links">
+      <a href="https://github.com/tochi-mba/Web-search-api/blob/main/CHANGELOG.md">What's new <span aria-hidden="true">↗</span></a>
+      <a href="#top">Back to top <span aria-hidden="true">↑</span></a>
+    </span>
+  </div>
+</footer>
+<script src="app.js" defer></script>
+</body>
+</html>

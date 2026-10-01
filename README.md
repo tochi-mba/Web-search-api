@@ -1,5 +1,7 @@
 # web-search-api
 
+A REX Technologies product. Site: <https://tochi-mba.github.io/Web-search-api/>
+
 A FastAPI service that scrapes Google search results and web pages, then
 synthesises an **executive summary** with any of 54 LLM providers — local
 Ollama, every Anthropic and OpenAI model, and 51 more that speak OpenAI's wire
