@@ -272,8 +272,9 @@ Every value is optional. These are the ones most deployments touch;
 
 When settings-api is configured, each caller can lower `max_content_chars`,
 choose a default model and search backend, disable extra providers, pick a
-default keyring profile, and choose how long their finished jobs stay
-readable. See [docs/architecture.md](docs/architecture.md#per-person-settings-ship-dark).
+default keyring profile, choose how long their finished jobs stay readable,
+and set how hard explicit results are filtered and how recent a result must
+be. See [docs/architecture.md](docs/architecture.md#per-person-settings-ship-dark).
 
 Provider credentials are **not** environment variables. They live in keyring,
 under the provider's key as the service name (`anthropic`, `groq`, …), and are

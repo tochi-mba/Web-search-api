@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A person's safe-search level and recency reach the search backend.**
+  `search.safe_search` and `search.recency_days` could be set and read back, and changed
+  nothing. A search that says nothing now takes the person's level (`off`, `moderate`,
+  `strict`) and their recency. `POST /v1/search` takes `recency_days` (1 to 365), and
+  `safe_search` may be omitted. A request can ask for more filtering than the person chose,
+  never less, and a settings-api outage filters at `moderate`. Google has one filter, so
+  both filtering levels turn it on; SearxNG is sent all three levels, and the smallest of
+  day, week, month or year that covers the recency.
 - A GitHub Pages site at <https://tochi-mba.github.io/Web-search-api/>, in the REX ink/signal style: what Web-search-api is,
   its API, how to run it and what it will not do. `site/` is plain static HTML;
   `.github/workflows/pages.yml` publishes it after `scripts/check_site.py` has checked every

@@ -10,7 +10,30 @@ import httpx
 
 from app import constants
 from app.core.errors import TimeoutProblem, UpstreamError
-from app.services.search.base import SearchQuery, SearchResponse, SearchResult
+from app.services.search.base import SafeSearch, SearchQuery, SearchResponse, SearchResult
+
+_SAFESEARCH = {SafeSearch.OFF: "0", SafeSearch.MODERATE: "1", SafeSearch.STRICT: "2"}
+
+#: SearxNG takes a named range, not a number of days: the smallest that covers the ask.
+_TIME_RANGES = ((1, "day"), (7, "week"), (31, "month"))
+
+
+def time_range(days: int) -> str:
+    """The SearxNG ``time_range`` that covers ``days``."""
+    return next((name for limit, name in _TIME_RANGES if days <= limit), "year")
+
+
+def _params(query: SearchQuery) -> dict[str, str]:
+    """The query string SearxNG is sent for one query."""
+    params = {
+        "q": query.to_query_string(),
+        "format": "json",
+        "language": query.language,
+        "safesearch": _SAFESEARCH[query.safe_search],
+    }
+    if query.recency_days is not None:
+        params["time_range"] = time_range(query.recency_days)
+    return params
 
 
 class SearxngSearchBackend:
@@ -45,12 +68,7 @@ class SearxngSearchBackend:
         try:
             response = await self._client.get(
                 f"{self._base_url}/search",
-                params={
-                    "q": query.to_query_string(),
-                    "format": "json",
-                    "language": query.language,
-                    "safesearch": "1" if query.safe_search else "0",
-                },
+                params=_params(query),
                 timeout=self._timeout,
             )
         except httpx.TimeoutException as exc:

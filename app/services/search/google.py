@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 from app.core.errors import SearchBlockedError
 from app.core.logging import get_logger
 from app.services.fetch.browser import BrowserSession
-from app.services.search.base import SearchQuery, SearchResponse
+from app.services.search.base import SafeSearch, SearchQuery, SearchResponse
 from app.services.search.serp_parser import detect_block, parse_google_serp
 
 logger = get_logger(__name__)
@@ -26,8 +26,13 @@ def build_search_url(query: SearchQuery) -> str:
         "hl": query.language,
         "gl": query.region,
     }
-    if query.safe_search:
+    # Google has one filter, not two levels: moderate and strict both turn it on.
+    if query.safe_search is not SafeSearch.OFF:
         params["safe"] = "active"
+    if query.recency_days is not None:
+        # `qdr:d` is the past day and `qdr:d7` the past seven.
+        days = "" if query.recency_days == 1 else str(query.recency_days)
+        params["tbs"] = f"qdr:d{days}"
     return f"{GOOGLE_SEARCH_URL}?{urlencode(params)}"
 
 

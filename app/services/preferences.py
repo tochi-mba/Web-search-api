@@ -39,6 +39,7 @@ from settings_client import (
 
 from app.core.errors import PreferencesUnavailableError
 from app.core.logging import get_logger
+from app.services.search.base import SafeSearch
 
 if TYPE_CHECKING:
     from settings_client import ResolvedSettings, SettingsClient
@@ -89,6 +90,13 @@ class Preferences:
 
     ``None`` when settings-api could not be asked and the answer must not be guessed.
     """
+
+    safe_search: SafeSearch | None = None
+    """How hard this person filters explicit results. ``None`` when nobody has chosen:
+    no settings-api is configured, and the request alone decides, as it always did."""
+
+    recency_days: int | None = None
+    """How recent a result must be when the request does not say. ``None`` is no filter."""
 
     def profile(self, requested: str | None) -> str:
         """The profile a request is resolved with: the one it named, or the default.
@@ -185,6 +193,8 @@ class SettingsApiPreferences:
                 disabled_providers=None,
                 job_retention_seconds=self._deployment.job_retention_seconds,
                 default_profile=None,
+                # Filtering falls back to the middle level: an outage cannot turn it off.
+                safe_search=SafeSearch.MODERATE,
             )
         except SettingsRejected as error:
             logger.warning("settings_rejected", namespace=NAMESPACE, status_code=error.status_code)
@@ -217,6 +227,8 @@ class SettingsApiPreferences:
                 deployment.job_retention_seconds if hours is None else hours * SECONDS_PER_HOUR
             ),
             default_profile=self._default_profile(resolved),
+            safe_search=_safe_search(resolved),
+            recency_days=_whole_number(resolved, "recency_days", minimum=1),
         )
 
     def _disabled_providers(self, resolved: ResolvedSettings) -> frozenset[str] | None:
@@ -266,6 +278,16 @@ def build_preference_source(
 
     logger.info("per_person_settings_on", namespace=NAMESPACE)
     return SettingsApiPreferences(client=client, settings=settings)
+
+
+def _safe_search(resolved: ResolvedSettings) -> SafeSearch:
+    """``search.safe_search``: the person's level, or the middle one for anything else."""
+    value = resolved.get("safe_search", None)
+    if isinstance(value, str) and value in SafeSearch:
+        return SafeSearch(value)
+    if value is not None:
+        logger.warning("setting_unusable", namespace=NAMESPACE, key="safe_search")
+    return SafeSearch.MODERATE
 
 
 def _whole_number(resolved: ResolvedSettings, key: str, *, minimum: int) -> int | None:
