@@ -66,7 +66,23 @@ class SearchRequest(StrictModel):
 
     language: str = Field(default="en", max_length=8)
     region: str = Field(default="us", max_length=8)
-    safe_search: bool = True
+    safe_search: bool | None = Field(
+        default=None,
+        description=(
+            "Filter explicit results. Omit to use the person's `search.safe_search`, or "
+            "true when nobody has chosen. A request can ask for more filtering than the "
+            "person chose, never less."
+        ),
+    )
+    recency_days: int | None = Field(
+        default=None,
+        ge=1,
+        le=365,
+        description=(
+            "Only results from the last this many days. Omit to use the person's "
+            "`search.recency_days`, or no filter when nobody has chosen."
+        ),
+    )
 
 
 class SearchResultOut(StrictModel):

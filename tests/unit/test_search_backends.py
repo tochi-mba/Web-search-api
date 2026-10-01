@@ -10,7 +10,7 @@ from app.core.errors import (
 )
 from app.services.keyring.caller import Caller
 from app.services.keyring.client import KeyringClient
-from app.services.search.base import SearchQuery, SearchResponse, SearchResult
+from app.services.search.base import SafeSearch, SearchQuery, SearchResponse, SearchResult
 from app.services.search.google import GoogleSearchBackend, build_search_url
 from app.services.search.searxng import SearxngSearchBackend
 from app.services.search.serper import SerperSearchBackend
@@ -53,8 +53,11 @@ def test_language_and_region_are_passed():
 
 
 def test_safe_search_toggles_the_flag():
-    assert "safe=active" in build_search_url(SearchQuery(query="x", safe_search=True))
-    assert "safe=active" not in build_search_url(SearchQuery(query="x", safe_search=False))
+    assert "safe=active" in build_search_url(SearchQuery(query="x"))
+    strict = SearchQuery(query="x", safe_search=SafeSearch.STRICT)
+    assert "safe=active" in build_search_url(strict)
+    off = SearchQuery(query="x", safe_search=SafeSearch.OFF)
+    assert "safe=active" not in build_search_url(off)
 
 
 def test_query_string_without_a_site_is_unchanged():

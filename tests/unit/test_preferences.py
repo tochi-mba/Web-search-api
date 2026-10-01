@@ -24,6 +24,7 @@ from app.services.preferences import (
     build_preference_source,
     deployment_preferences,
 )
+from app.services.search.base import SafeSearch
 from tests.conftest import make_settings
 
 USER_TOKEN = "a-user-token-from-keyring"
@@ -115,6 +116,7 @@ class TestAPersonsChoices:
             disabled_providers=frozenset({"openai"}),
             job_retention_seconds=24 * HOUR,
             default_profile="work",
+            safe_search=SafeSearch.MODERATE,
         )
 
     async def test_a_ceiling_can_be_narrowed_and_never_raised(self) -> None:

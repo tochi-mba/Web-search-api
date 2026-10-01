@@ -1,5 +1,5 @@
 from app.core.errors import ProviderUnavailableError, SearchBlockedError
-from app.services.search.base import SearchResponse
+from app.services.search.base import SafeSearch, SearchResponse
 
 
 async def test_runs_a_single_query(client, fake_search):
@@ -44,7 +44,7 @@ async def test_query_options_reach_the_backend(client, fake_search):
     assert sent.site == "reddit.com"
     assert sent.language == "fr"
     assert sent.region == "ca"
-    assert sent.safe_search is False
+    assert sent.safe_search is SafeSearch.OFF
 
 
 # --- summarising ----------------------------------------------------------- #

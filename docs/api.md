@@ -91,7 +91,8 @@ whether `temperature` will be honoured.
 | `model` | server default | Namespaced `provider:model` |
 | `additional_notes` | — | Applied to every query that has none of its own. At most 4,000 chars |
 | `language` / `region` | `en` / `us` | At most 8 chars each |
-| `safe_search` | `true` | |
+| `safe_search` | the person's `search.safe_search`, else `true` | A request can ask for more filtering than the person chose, never less |
+| `recency_days` | the person's `search.recency_days`, else no filter | 1–365. Only results this recent |
 
 Each item in `results[]` has `status` of `ok` or `error`. A failing query does
 not fail the batch.

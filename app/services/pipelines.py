@@ -37,7 +37,7 @@ from app.services.keyring.caller import Caller
 from app.services.keyring.client import ResolvedAuth
 from app.services.llm.summarizer import Summarizer
 from app.services.preferences import Preferences
-from app.services.search.base import SearchQuery
+from app.services.search.base import SafeSearch, SearchQuery
 from app.services.search.router import SearchRouter
 
 logger = get_logger(__name__)
@@ -150,6 +150,11 @@ def _make_query_runner(
 ) -> Callable[[], Awaitable[SearchQueryResult | DomainError]]:
     """Build a coroutine factory running one query without raising."""
 
+    chosen = preferences.safe_search if preferences is not None else None
+    recency = request.recency_days
+    if recency is None and preferences is not None:
+        recency = preferences.recency_days
+
     async def run() -> SearchQueryResult | DomainError:
         try:
             response = await search_router.search(
@@ -159,7 +164,8 @@ def _make_query_runner(
                     site=query.site,
                     language=request.language,
                     region=request.region,
-                    safe_search=request.safe_search,
+                    safe_search=SafeSearch.for_request(request.safe_search, chosen=chosen),
+                    recency_days=recency,
                 ),
                 caller=caller,
                 preferred=preferences.search_backend if preferences is not None else None,

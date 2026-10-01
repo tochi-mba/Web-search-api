@@ -70,8 +70,9 @@ suddenly accepts nobody.
 Unset, everybody gets the configuration on this page — which is what this service did
 before it read anybody's settings at all, and how a deployment ships. Set both variables
 and each request reads that person's `search` settings: their default model, content
-ceiling, preferred search backend, disabled providers, job retention, and which profile
-they mean when they name none.
+ceiling, preferred search backend, disabled providers, job retention, how hard explicit
+results are filtered, how recent a result must be, and which profile they mean when they
+name none.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
@@ -80,6 +81,13 @@ they mean when they name none.
 
 **The pair must be set together.** A URL with no token would be refused on every call; a
 token with no URL is a secret configured for nothing. Either is a startup error.
+
+`safe_search` is `off`, `moderate` or `strict`. Google has one filter, so both filtering
+levels turn it on; SearxNG is sent all three. A request that says nothing takes the
+person's level, and one that says takes the stricter of the two. During a settings-api
+outage the level is `moderate`: an outage cannot turn filtering off. `recency_days` is sent
+to Google as a day count and to SearxNG as the smallest of day, week, month or year that
+covers it; a request's own `recency_days` wins.
 
 A person may lower `max_content_chars` and add to `disabled_providers`; they can never
 raise the ceiling or re-enable a provider the operator turned off. Job retention is theirs,

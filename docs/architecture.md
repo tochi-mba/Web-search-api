@@ -123,6 +123,11 @@ the reaper has no user token. `disabled_providers` is refused during an outage
 rather than falling back to "everything allowed" -- listing models or talking
 to one fails with 503; a scrape that never summarises still runs.
 
+`safe_search` is the one setting a request body cannot override downwards. The person's
+level is a floor: a request may ask for more filtering and never for less, because a
+household that chose `strict` should not be undone by whoever writes the request. With no
+settings-api configured nobody has chosen, and the request alone decides, as it always did.
+
 ## Request lifecycle resources
 
 One `httpx.AsyncClient` and one browser process are shared across all requests
