@@ -29,7 +29,7 @@ automatically and fails if it is malformed.
 | `key` | Namespace in model ids (`acme:some-model`) |
 | `label` | Human-readable name |
 | `base_url` | API root, no trailing slash |
-| `kind` | `frontier`, `aggregator`, `inference` (default) or `local`; the table aliases them `F`, `A`, `I`, `L` |
+| `kind` | `frontier`, `aggregator`, `inference` (default) or `local`; the table aliases the non-default kinds `F`, `A`, `L` |
 | `auth` | `bearer` (default), `header`, `query` or `none`. Decides how `scripts/provision_keyring.py` stores the key |
 | `auth_header` | Header name when `auth="header"` |
 | `models_path` | Defaults to `/models` |
@@ -90,7 +90,7 @@ inside an adapter. To teach the service about a new model family, add a rule to
 `capability_rules.py` — ordered most-specific first — and a test in
 `tests/unit/test_capabilities.py` pinning the exact wire body.
 
-Capability flags: `supports_temperature`, `supports_top_p`, `supports_streaming`,
+Capability flags: `supports_temperature`, `supports_streaming`,
 `supports_json_mode`, `supports_system_prompt`, `system_role`,
 `max_tokens_param`, `reasoning`, `context_window`, `max_output_tokens`.
 

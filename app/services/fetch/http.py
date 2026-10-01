@@ -34,11 +34,6 @@ class FetchResult:
     content_type: str
     body: str
 
-    @property
-    def redirected(self) -> bool:
-        """Whether the fetch ended somewhere other than where it started."""
-        return self.url != self.final_url
-
 
 class HttpFetcher:
     """Fetches documents over HTTP with size, redirect and SSRF limits."""

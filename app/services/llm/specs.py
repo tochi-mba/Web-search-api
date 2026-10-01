@@ -96,7 +96,6 @@ def _spec(key: str, label: str, base_url: str, **kwargs: object) -> ProviderSpec
 
 F = ProviderKind.FRONTIER
 A = ProviderKind.AGGREGATOR
-I = ProviderKind.INFERENCE  # noqa: E741 - a one-letter alias keeps the table readable
 L = ProviderKind.LOCAL
 
 
