@@ -40,7 +40,7 @@ async def test_successful_fetch_returns_the_body(fetcher):
     assert result.status_code == 200
     assert "<h1>hi</h1>" in result.body
     assert result.content_type == "text/html"
-    assert result.redirected is False
+    assert result.final_url == result.url
 
 
 @respx.mock
@@ -59,7 +59,6 @@ async def test_follows_a_safe_redirect(fetcher):
     result = await fetcher.fetch("https://example.com/a")
     assert result.final_url == "https://other.com/b"
     assert result.url == "https://example.com/a"
-    assert result.redirected is True
 
 
 @respx.mock

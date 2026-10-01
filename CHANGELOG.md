@@ -89,6 +89,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `ProviderSpec.base_url_env`. Nine local-runtime rows named an environment variable
   (`LMSTUDIO_BASE_URL`, `VLLM_BASE_URL`, ...) that nothing read; endpoints are overridden
   through `WSA_PROVIDER_BASE_URLS`.
+- Three things nothing read, found by the family dead-code sweep: the
+  `ModelCapabilities.supports_top_p` flag (seven rules set it, no request carries a
+  `top_p` and no adapter consulted it), `FetchResult.redirected` (the same as comparing
+  `url` with `final_url`, which is what callers do) and the `I` alias in the provider
+  spec table (`inference` is the default kind, so no row named it).
 
 ### Fixed
 

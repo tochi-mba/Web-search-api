@@ -54,7 +54,6 @@ class ModelCapabilities:
     """What one model will and will not accept."""
 
     supports_temperature: bool = True
-    supports_top_p: bool = True
     supports_streaming: bool = True
     supports_json_mode: bool = True
     supports_system_prompt: bool = True
@@ -79,7 +78,6 @@ class CapabilityRule:
 #: universally-accepted request rather than guessing at exotic parameters.
 UNKNOWN_MODEL_CAPABILITIES = ModelCapabilities(
     supports_temperature=True,
-    supports_top_p=True,
     supports_json_mode=False,
     reasoning=ReasoningStyle.NONE,
     notes=("unknown model: using conservative defaults",),
