@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A GitHub Pages site at <https://tochi-mba.github.io/Web-search-api/>, in the REX ink/signal style: what Web-search-api is,
+  its API, how to run it and what it will not do. `site/` is plain static HTML;
+  `.github/workflows/pages.yml` publishes it after `scripts/check_site.py` has checked every
+  page for a broken anchor, a missing asset, an image without alt text or draft text.
+- The repository is attributed to REX Technologies: the LICENSE copyright holder, the package
+  author and the README.
 - The service: `POST /v1/search` scrapes Google results (failing over to SearxNG and
   Serper when Google refuses), `POST /v1/scrape` fetches pages, rendering them in headless
   Chromium when they need it, and `POST /v1/summarize` writes an executive summary with

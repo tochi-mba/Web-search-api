@@ -2,6 +2,7 @@
 name = "web-search-api"
 version = "0.1.0"
 description = "FastAPI service that scrapes Google search results and web pages, then synthesises executive summaries with any of 54 LLM providers."
+authors = [{ name = "REX Technologies" }]
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -142,6 +143,8 @@ convention = "google"
 [tool.mypy]
 python_version = "3.12"
 files = ["app", "tests"]
+# `scripts` is on the path so the tests can import the site checker they exercise.
+mypy_path = "scripts"
 strict = true
 warn_unreachable = true
 warn_unused_ignores = true
