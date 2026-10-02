@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A person's settings are read for the profile the request runs as.** The model, backend,
+  safe-search level, result count and recency are profile-scoped, and settings-api returns a
+  profile's values only to a request that names the profile. This service named none, so
+  each reached it as the catalogue default: a person who chose `strict` filtering got
+  `moderate`. The request's `X-Keyring-Profile` is now named, or with none the person's
+  `common.default_profile`, read first. settings-client moves to 0.4.0, whose test fake keeps
+  profiles apart; the old one ignored them, which is why no test caught this.
 - **A blocked Google search is reported as soon as the block page loads.** The render waited
   only for the results element, which a captcha or consent page does not have, so a blocked
   search sat out the whole navigation timeout (about fifty seconds end to end). A caller with
