@@ -1,0 +1,19 @@
+{
+  "$schema": "https://tochi-mba.github.io/schema/project.schema.json",
+  "slug": "web-search",
+  "name": "web search",
+  "tagline": "Scrape search results and pages, then synthesise an executive summary with any of 54 LLM providers.",
+  "description": "A FastAPI service that scrapes Google results and web pages and summarises them with local Ollama, every Anthropic and OpenAI model, and 51 more that speak OpenAI's wire format. API only, designed to sit behind an MCP server. Provider keys never live here; they are resolved per request from keyring for the person the request is for.",
+  "highlights": [
+    "54 providers behind one interface",
+    "Per-caller credentials, so answers are per caller",
+    "Local runtimes work with no keyring at all"
+  ],
+  "stack": ["Python 3.12", "FastAPI", "Ollama"],
+  "category": "service",
+  "family": "lucy",
+  "role": "research",
+  "status": "active",
+  "order": 170,
+  "display": true
+}
