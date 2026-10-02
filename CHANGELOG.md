@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Fixed
+
+- **A blocked Google search is reported as soon as the block page loads.** The render waited
+  only for the results element, which a captcha or consent page does not have, so a blocked
+  search sat out the whole navigation timeout (about fifty seconds end to end). A caller with
+  a shorter deadline gave up first and never learned the search had been blocked. The render
+  now stops at whichever of results or a block page appears first.
+
 ### Added
 
 - **A person's safe-search level and recency reach the search backend.**
