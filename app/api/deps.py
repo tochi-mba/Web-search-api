@@ -145,9 +145,9 @@ async def get_caller(request: Request) -> Caller | None:
 
     account_id = await verifier.verify(token)
     source = get_preference_source(request)
-    preferences = await source.for_token(token)
+    requested_profile = request.headers.get(PROFILE_HEADER) or None
+    preferences = await source.for_token(token, profile=requested_profile)
     request.state.preferences_resolved = preferences
-    requested_profile = request.headers.get(PROFILE_HEADER)
     profile = requested_profile if requested_profile else preferences.default_profile
     return Caller(account_id=account_id, profile=profile, user_token=token)
 
@@ -162,7 +162,8 @@ async def get_preferences(
         return cached
     source = get_preference_source(request)
     token = caller.user_token if caller is not None else None
-    preferences = await source.for_token(token)
+    profile = caller.profile if caller is not None else None
+    preferences = await source.for_token(token, profile=profile)
     request.state.preferences_resolved = preferences
     return preferences
 

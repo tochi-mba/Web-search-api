@@ -68,7 +68,9 @@ class PerTokenFake:
     def seed(self, token: str, namespace: str, values: dict[str, Any]) -> None:
         self._clients.setdefault(token, FakeSettingsClient()).seed(namespace, values)
 
-    async def resolve(self, namespace: str, *, user_token: str) -> object:
+    async def resolve(
+        self, namespace: str, *, user_token: str, profile: str | None = None
+    ) -> object:
         if self.unavailable:
             from settings_client import SettingsUnavailable
 
