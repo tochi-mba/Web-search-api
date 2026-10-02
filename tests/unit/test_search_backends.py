@@ -1,6 +1,7 @@
 import httpx
 import pytest
 import respx
+from selectolax.parser import HTMLParser
 
 from app.core.errors import (
     ProviderUnavailableError,
@@ -11,7 +12,7 @@ from app.core.errors import (
 from app.services.keyring.caller import Caller
 from app.services.keyring.client import KeyringClient
 from app.services.search.base import SafeSearch, SearchQuery, SearchResponse, SearchResult
-from app.services.search.google import GoogleSearchBackend, build_search_url
+from app.services.search.google import READY_SELECTOR, GoogleSearchBackend, build_search_url
 from app.services.search.searxng import SearxngSearchBackend
 from app.services.search.serper import SerperSearchBackend
 from tests.fake_keyring import BASE_URL, FakeKeyring
@@ -25,6 +26,7 @@ class FakeBrowser:
 
     async def render(self, url, *, wait_for_selector=None):
         self.rendered.append(url)
+        self.waited_for = wait_for_selector
         if self.error:
             raise self.error
         return self.html
@@ -310,3 +312,41 @@ def test_search_response_is_empty_when_there_are_no_results():
         SearchResponse(query="q", backend="b", results=[SearchResult("t", "u", "s", 1)]).is_empty
         is False
     )
+
+
+# --- a blocked search is seen at once ------------------------------------- #
+
+
+def _matches(selector_list: str, html: str) -> bool:
+    """Whether any selector in a CSS selector list matches the page, as a browser would decide."""
+    return HTMLParser(html).css_first(selector_list) is not None
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        "google_serp_modern.html",
+        "google_serp_legacy.html",
+        "google_captcha.html",
+        "google_consent.html",
+    ],
+)
+def test_the_render_waits_for_results_or_a_block_page_whichever_comes(load_html, page):
+    """The bug, named: Google's render waited only for results. A captcha page has none, so a
+    blocked search sat out the whole navigation timeout (about fifty seconds end to end) and
+    the hub's step deadline fired first, telling the model to narrow its query instead of
+    saying Google had blocked the search."""
+    assert _matches(READY_SELECTOR, load_html(page))
+
+
+def test_a_page_that_is_neither_still_waits(load_html):
+    assert not _matches(READY_SELECTOR, load_html("minimal.html"))
+
+
+async def test_the_backend_waits_on_the_combined_selector(load_html):
+    browser = FakeBrowser(load_html("google_serp_modern.html"))
+
+    await GoogleSearchBackend(browser).search(SearchQuery(query="x"))
+
+    assert browser.waited_for == READY_SELECTOR
+    assert READY_SELECTOR.startswith("div#search, ")

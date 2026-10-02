@@ -17,6 +17,21 @@ GOOGLE_SEARCH_URL = "https://www.google.com/search"
 #: Present once results have rendered. Waiting on it avoids reading a half-built DOM.
 _RESULTS_SELECTOR = "div#search"
 
+#: Present on the pages Google serves instead of results: the anti-bot challenge at
+#: /sorry/index and the cookie-consent wall. Without them in the wait, a blocked search sat
+#: out the whole navigation timeout looking for results that were never coming, and the
+#: caller's own deadline fired first -- so the block was never reported as a block.
+_BLOCK_SELECTORS = (
+    "#captcha-form",
+    "#recaptcha",
+    ".g-recaptcha",
+    "form[action*='/sorry/']",
+    "form[action*='consent.google.com']",
+)
+
+#: What the render waits for: whichever of results or a block page appears first.
+READY_SELECTOR = ", ".join((_RESULTS_SELECTOR, *_BLOCK_SELECTORS))
+
 
 def build_search_url(query: SearchQuery) -> str:
     """Build the Google search URL for a query."""
@@ -57,7 +72,7 @@ class GoogleSearchBackend:
     async def search(self, query: SearchQuery) -> SearchResponse:
         """Run one query against Google and parse the results."""
         url = build_search_url(query)
-        html = await self._browser.render(url, wait_for_selector=_RESULTS_SELECTOR)
+        html = await self._browser.render(url, wait_for_selector=READY_SELECTOR)
 
         block = detect_block(html)
         if block is not None:
