@@ -37,8 +37,10 @@ from settings_client import (
     SettingsUnavailable,
 )
 
+from app import constants
 from app.core.errors import PreferencesUnavailableError
 from app.core.logging import get_logger
+from app.services.llm.prompts import SummaryLength
 from app.services.search.base import SafeSearch
 
 if TYPE_CHECKING:
@@ -97,6 +99,25 @@ class Preferences:
 
     recency_days: int | None = None
     """How recent a result must be when the request does not say. ``None`` is no filter."""
+
+    language: str | None = None
+    """Results' language when the request does not say. ``None`` is English, as always."""
+
+    region: str | None = None
+    """Where results are ranked for when the request does not say. ``None`` is the US."""
+
+    blocked_domains: tuple[str, ...] = ()
+    """Sites whose results this person never sees. Each also covers its subdomains."""
+
+    read_top_pages: int = 0
+    """How many top result pages a summary is written from when the request does not say.
+    ``0`` is titles and snippets only, as always."""
+
+    summary_length: SummaryLength = SummaryLength.STANDARD
+    """How long a summary is."""
+
+    research_notes: str | None = None
+    """Standing guidance for every summary, added after a request's own notes."""
 
     def profile(self, requested: str | None) -> str:
         """The profile a request is resolved with: the one it named, or the default.
@@ -185,7 +206,8 @@ class SettingsApiPreferences:
         """Read this person's ``search`` settings for a profile, or the configuration.
 
         Most ``search`` settings are profile-scoped (model, backend, safe search, result
-        count, recency), and settings-api returns a profile's values only to a resolve that
+        count, recency, language, region, pages read, summary length, research notes),
+        and settings-api returns a profile's values only to a resolve that
         names it. So the profile is always named: the one the request gave, or, when it
         gave none, the person's ``common.default_profile``, which is account-wide and comes
         back from a first resolve without one.
@@ -245,6 +267,17 @@ class SettingsApiPreferences:
             default_profile=self._default_profile(resolved),
             safe_search=_safe_search(resolved),
             recency_days=_whole_number(resolved, "recency_days", minimum=1),
+            language=_text(resolved, "language"),
+            region=_text(resolved, "region"),
+            blocked_domains=tuple(
+                domain.strip().lower() for domain in _string_list(resolved, "blocked_domains") or ()
+            ),
+            read_top_pages=min(
+                _whole_number(resolved, "read_top_pages", minimum=0) or 0,
+                constants.MAX_PAGES_PER_QUERY,
+            ),
+            summary_length=_summary_length(resolved),
+            research_notes=_text(resolved, "research_notes"),
         )
 
     def _disabled_providers(self, resolved: ResolvedSettings) -> frozenset[str] | None:
@@ -304,6 +337,16 @@ def _safe_search(resolved: ResolvedSettings) -> SafeSearch:
     if value is not None:
         logger.warning("setting_unusable", namespace=NAMESPACE, key="safe_search")
     return SafeSearch.MODERATE
+
+
+def _summary_length(resolved: ResolvedSettings) -> SummaryLength:
+    """``search.summary_length``: the person's length, or the standard one for anything else."""
+    value = resolved.get("summary_length", None)
+    if isinstance(value, str) and value in SummaryLength:
+        return SummaryLength(value)
+    if value is not None:
+        logger.warning("setting_unusable", namespace=NAMESPACE, key="summary_length")
+    return SummaryLength.STANDARD
 
 
 def _whole_number(resolved: ResolvedSettings, key: str, *, minimum: int) -> int | None:

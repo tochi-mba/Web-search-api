@@ -23,6 +23,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A person's language, region, blocked sites and page reading shape their searches.**
+  Six `search` settings now reach the service. A search that leaves `language` or `region`
+  out takes the person's `search.language` and `search.region`, then `en` and `us` as
+  before. Results from a site in `search.blocked_domains`, or any of its subdomains, are
+  dropped before anything is read or summarised; the rest keep the rank the backend gave
+  them, and a query whose `site` names a blocked domain still gets that site's results, as
+  does a URL named to `/v1/scrape`. A
+  summarised search that leaves `fetch_pages` out reads the top `search.read_top_pages`
+  pages (none until chosen) and writes its summary from their text. Every summary, from
+  search, scrape and summarize alike, is written at the person's `search.summary_length`
+  (`brief`, `standard`, `detailed`) and follows their `search.research_notes` after the
+  request's own notes, inside the same 4,000-character cap; `notes_applied` still reports
+  only the request's notes. `language`, `region`, `fetch_pages` and `max_pages` may now be
+  omitted. With nobody's choices, and during a settings-api outage, every search and
+  summary is exactly what it was. settings-client moves to 0.4.1.
+
 - **A person's safe-search level and recency reach the search backend.**
   `search.safe_search` and `search.recency_days` could be set and read back, and changed
   nothing. A search that says nothing now takes the person's level (`off`, `moderate`,
