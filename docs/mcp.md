@@ -36,7 +36,7 @@ never the same pages with the provenance stripped.
 
 | Tool | When |
 | --- | --- |
-| `search` | Find pages. Summaries without `fetch_pages` are titles and snippets; with it, the top pages are scraped. |
+| `search` | Find pages. Summaries without `fetch_pages` are titles and snippets, or the person's `search.read_top_pages`; with it, the top pages are scraped. |
 | `scrape` | The caller already has URLs. |
 | `summarize` | The caller already has the text. |
 | `list_models` | Before naming a `provider:model`. The catalogue is per caller. |

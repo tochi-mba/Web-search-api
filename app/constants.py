@@ -39,6 +39,12 @@ MODEL_CACHE_TTL_SECONDS = 300.0
 #: Upper bound on results requested from a single search query.
 MAX_RESULTS_PER_QUERY = 50
 
+#: Upper bound on result pages scraped per query, whether a request or a person asks.
+MAX_PAGES_PER_QUERY = 10
+
+#: Result pages scraped per query when a request asks for pages and names no count.
+DEFAULT_PAGES_PER_QUERY = 3
+
 #: Upper bound on queries in one batch request.
 MAX_QUERIES_PER_REQUEST = 20
 

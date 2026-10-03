@@ -85,12 +85,12 @@ whether `temperature` will be honoured.
 | `queries[].max_results` | `10` | 1–50 |
 | `queries[].site` | — | Adds a `site:` filter. At most 253 chars |
 | `queries[].additional_notes` | — | Replaces the batch-level notes for this query. At most 4,000 chars |
-| `fetch_pages` | `false` | Also scrape the top result pages |
-| `max_pages` | `3` | 1–10, only meaningful with `fetch_pages` |
+| `fetch_pages` | the person's `search.read_top_pages` when summarised, else `false` | Also scrape the top result pages |
+| `max_pages` | the person's `search.read_top_pages`, else `3` | 1–10, only meaningful when pages are read |
 | `summarize` | `true` | |
 | `model` | server default | Namespaced `provider:model` |
 | `additional_notes` | — | Applied to every query that has none of its own. At most 4,000 chars |
-| `language` / `region` | `en` / `us` | At most 8 chars each |
+| `language` / `region` | the person's `search.language` / `search.region`, else `en` / `us` | At most 8 chars each |
 | `safe_search` | the person's `search.safe_search`, else `true` | A request can ask for more filtering than the person chose, never less |
 | `recency_days` | the person's `search.recency_days`, else no filter | 1–365. Only results this recent |
 
@@ -99,7 +99,20 @@ not fail the batch.
 
 Without `fetch_pages`, summaries are built from titles and snippets — fast and
 cheap. With it, the top `max_pages` results per query are scraped and their full
-text is summarised instead. A page that cannot be fetched keeps its snippet.
+text is summarised instead. A page that cannot be fetched keeps its snippet. A
+summarised request that leaves `fetch_pages` out reads the person's
+`search.read_top_pages`; a batch with `summarize: false` reads no page it did not ask for.
+
+Results from a site in the person's `search.blocked_domains`, or a subdomain of one, are
+dropped before any page is read or summarised, so a query can return fewer results than
+`max_results`. The rest keep the rank the backend gave them. A query whose `site` names a
+blocked domain has asked for it, and gets its results, and so does a URL named to
+`/v1/scrape`: blocking a site hides it from results, not from a page the caller names.
+
+Every summary, here and from `/v1/scrape` and `/v1/summarize`, is written at the person's
+`search.summary_length` and follows their `search.research_notes` after the request's own
+`additional_notes`, inside the same 4,000-character cap. `notes_applied` reports only the
+request's notes.
 
 ## `POST /v1/scrape`
 

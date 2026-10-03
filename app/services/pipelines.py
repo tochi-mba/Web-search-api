@@ -12,7 +12,9 @@ that submitted it has returned.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from urllib.parse import urlsplit
 
+from app import constants
 from app.core.concurrency import bounded_gather
 from app.core.errors import DomainError
 from app.core.logging import get_logger
@@ -63,7 +65,8 @@ async def run_search(
 
     By default the summary is built from result titles and snippets, which is
     fast and cheap. Set ``fetch_pages`` to also scrape the top result pages and
-    summarise their full text instead.
+    summarise their full text instead; a request that does not say reads as many as the
+    person's ``search.read_top_pages``.
 
     One failing query never fails the batch: each result carries its own status.
     """
@@ -88,8 +91,9 @@ async def run_search(
             continue
         results.append(outcome)
 
-    if request.fetch_pages:
-        await _attach_page_contents(results, request, fetcher, concurrency)
+    per_query = _pages_to_read(request, preferences)
+    if per_query:
+        await _attach_page_contents(results, per_query, fetcher, concurrency)
 
     if request.summarize:
         for result in results:
@@ -99,9 +103,25 @@ async def run_search(
     return SearchResponse(results=results)
 
 
+def _pages_to_read(request: SearchRequest, preferences: Preferences | None) -> int:
+    """How many top result pages each query's summary is written from; ``0`` is snippets.
+
+    A request that says wins. One that does not takes the person's ``read_top_pages``, but
+    only when it is summarised: that setting is about what a summary is written from, and
+    a batch with no summary would scrape pages for nothing.
+    """
+    chosen = preferences.read_top_pages if preferences is not None else 0
+    if request.fetch_pages is None:
+        if not (request.summarize and chosen):
+            return 0
+    elif not request.fetch_pages:
+        return 0
+    return request.max_pages or chosen or constants.DEFAULT_PAGES_PER_QUERY
+
+
 async def _attach_page_contents(
     results: list[SearchQueryResult],
-    request: SearchRequest,
+    per_query: int,
     fetcher: PageFetcher,
     concurrency: int,
 ) -> None:
@@ -114,7 +134,7 @@ async def _attach_page_contents(
         item
         for result in results
         if result.status is ItemStatus.OK
-        for item in result.results[: request.max_pages]
+        for item in result.results[:per_query]
     ]
     if not targets:
         return
@@ -154,6 +174,9 @@ def _make_query_runner(
     recency = request.recency_days
     if recency is None and preferences is not None:
         recency = preferences.recency_days
+    language = request.language or (preferences.language if preferences is not None else None)
+    region = request.region or (preferences.region if preferences is not None else None)
+    blocked = _blocked_for(query, preferences)
 
     async def run() -> SearchQueryResult | DomainError:
         try:
@@ -162,8 +185,8 @@ def _make_query_runner(
                     query=query.query,
                     max_results=query.max_results,
                     site=query.site,
-                    language=request.language,
-                    region=request.region,
+                    language=language or "en",
+                    region=region or "us",
                     safe_search=SafeSearch.for_request(request.safe_search, chosen=chosen),
                     recency_days=recency,
                 ),
@@ -183,10 +206,38 @@ def _make_query_runner(
                     title=item.title, url=item.url, snippet=item.snippet, rank=item.rank
                 )
                 for item in response.results
+                if not (blocked and _within_any(_host(item.url), blocked))
             ],
         )
 
     return run
+
+
+def _blocked_for(query: SearchQueryIn, preferences: Preferences | None) -> tuple[str, ...]:
+    """The person's blocked domains, less any that cover the site this query names.
+
+    A query restricted to a site has asked for that site's results, and the request wins.
+    """
+    blocked = preferences.blocked_domains if preferences is not None else ()
+    if not query.site:
+        return blocked
+    site = query.site.strip().lower()
+    return tuple(domain for domain in blocked if not _within_any(site, (domain,)))
+
+
+def _host(url: str) -> str:
+    """The lower-cased host ``url`` points at, or empty when it has none."""
+    try:
+        return urlsplit(url).hostname or ""
+    except ValueError:
+        # A malformed link from a results page is not this person's blocked site, and
+        # must not fail the query it came back in.
+        return ""
+
+
+def _within_any(host: str, domains: tuple[str, ...]) -> bool:
+    """Whether ``host`` is one of ``domains`` or a subdomain of one."""
+    return any(host == domain or host.endswith(f".{domain}") for domain in domains)
 
 
 async def _attach_summary(

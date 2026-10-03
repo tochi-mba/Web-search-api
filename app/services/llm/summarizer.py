@@ -19,7 +19,7 @@ from app.services.keyring.caller import Caller
 from app.services.keyring.client import ResolvedAuth
 from app.services.llm.base import ChatMessage, ChatRequest
 from app.services.llm.capabilities import resolve_capabilities
-from app.services.llm.prompts import build_summary_prompt
+from app.services.llm.prompts import SummaryLength, build_summary_prompt
 from app.services.llm.registry import ModelRegistry
 from app.services.preferences import Preferences
 from app.services.text.truncate import char_budget_for_context, truncate
@@ -168,6 +168,9 @@ class Summarizer:
         The character budget is the smaller of the configured ceiling and what
         the resolved model's context window can hold, so a 200K-context model
         truncates harder than a 1M one without the caller doing anything.
+
+        The person's summary length and standing research notes come from ``preferences``
+        here, once, so search, scrape and summarize all apply them alike.
         """
         disabled = (
             preferences.require_disabled_providers() if preferences is not None else frozenset()
@@ -199,6 +202,10 @@ class Summarizer:
             topic=topic,
             additional_notes=additional_notes,
             sources=sources,
+            research_notes=preferences.research_notes if preferences is not None else None,
+            length=(
+                preferences.summary_length if preferences is not None else SummaryLength.STANDARD
+            ),
         )
 
         if not bounded.text.strip():

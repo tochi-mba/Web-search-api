@@ -71,8 +71,10 @@ Unset, everybody gets the configuration on this page — which is what this serv
 before it read anybody's settings at all, and how a deployment ships. Set both variables
 and each request reads that person's `search` settings: their default model, content
 ceiling, preferred search backend, disabled providers, job retention, how hard explicit
-results are filtered, how recent a result must be, and which profile they mean when they
-name none.
+results are filtered, how recent a result must be, the language and region results are
+ranked for, the sites whose results they never see, how many top pages a summary is
+written from, how long a summary is and the standing guidance it follows, and which
+profile they mean when they name none.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
@@ -88,6 +90,14 @@ person's level, and one that says takes the stricter of the two. During a settin
 outage the level is `moderate`: an outage cannot turn filtering off. `recency_days` is sent
 to Google as a day count and to SearxNG as the smallest of day, week, month or year that
 covers it; a request's own `recency_days` wins.
+
+`language`, `region` and `read_top_pages` work the same way: a request that says wins,
+and an outage is `en`, `us` and snippets only, as before. `read_top_pages` is at most 10,
+the most a request may ask for, and costs a page fetch per result read, so it applies only
+to a search that is summarised. `blocked_domains` is account-wide; an outage blocks nothing,
+which shows results the person can see and sends nothing anywhere new. An outage writes
+summaries at the `standard` length with no standing notes. `research_notes` is prompt
+text a person writes for themselves: its catalogue entry says no assistant may write it.
 
 A person may lower `max_content_chars` and add to `disabled_providers`; they can never
 raise the ceiling or re-enable a provider the operator turned off. Job retention is theirs,

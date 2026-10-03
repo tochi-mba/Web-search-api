@@ -1,9 +1,14 @@
+import dataclasses
+
 import pytest
 
 from app.services.keyring.client import NO_AUTH
 from app.services.llm.base import ChatResponse, ModelInfo
+from app.services.llm.prompts import SYSTEM_PROMPT, SummaryLength
 from app.services.llm.registry import ModelRegistry
 from app.services.llm.summarizer import Summarizer
+from app.services.preferences import deployment_preferences
+from tests.conftest import make_settings
 
 SUMMARY_JSON = '{"executive_summary": "Latency rose 40%.", "key_points": ["queues", "sharding"]}'
 
@@ -207,3 +212,28 @@ async def test_empty_model_response_yields_an_empty_summary():
     provider = RecordingProvider(response_text="")
     summary = await build(provider).summarize("Content.")
     assert summary.executive_summary == ""
+
+
+# --- a person's summary length and research notes ------------------------- #
+
+
+async def test_the_persons_length_and_research_notes_reach_the_model(provider):
+    """`search.summary_length` and `search.research_notes` shape every summary."""
+    preferences = dataclasses.replace(
+        deployment_preferences(make_settings()),
+        summary_length=SummaryLength.DETAILED,
+        research_notes="Flag sponsored content.",
+    )
+
+    summary = await build(provider).summarize("Some content.", preferences=preferences)
+
+    request = provider.requests[0]
+    assert "<five to ten sentences of prose>" in request.system
+    assert "Flag sponsored content." in request.messages[0].content
+    assert summary.notes_applied is False
+
+
+async def test_without_a_persons_choices_the_summary_is_asked_for_as_before(provider):
+    await build(provider).summarize("Some content.")
+
+    assert provider.requests[0].system == SYSTEM_PROMPT

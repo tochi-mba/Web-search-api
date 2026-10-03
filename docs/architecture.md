@@ -128,6 +128,14 @@ level is a floor: a request may ask for more filtering and never for less, becau
 household that chose `strict` should not be undone by whoever writes the request. With no
 settings-api configured nobody has chosen, and the request alone decides, as it always did.
 
+Every other `search` setting yields to a request that says. `blocked_domains` hides a
+site's results and keeps their backend rank on the rest, but a query whose `site` names
+that domain, or a URL named to `/v1/scrape`, has asked for it. `read_top_pages` applies
+only to a summarised search, since it is about what a summary is written from.
+`summary_length` and `research_notes` are applied in the summariser, once, so search,
+scrape and summarize write alike. `research_notes` reaches a model's prompt, so it is
+framed as focus rather than fact, and only the person may write it: no assistant can.
+
 ## Request lifecycle resources
 
 One `httpx.AsyncClient` and one browser process are shared across all requests
