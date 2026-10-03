@@ -37,12 +37,22 @@ class SearchRequest(StrictModel):
 
     queries: list[SearchQueryIn] = Field(min_length=1, max_length=constants.MAX_QUERIES_PER_REQUEST)
 
-    fetch_pages: bool = Field(
-        default=False,
-        description="Also scrape the top result pages instead of using snippets alone.",
+    fetch_pages: bool | None = Field(
+        default=None,
+        description=(
+            "Also scrape the top result pages instead of using snippets alone. Omit to use "
+            "the person's `search.read_top_pages` when the batch is summarised, or false "
+            "when nobody has chosen."
+        ),
     )
-    max_pages: int = Field(
-        default=3, ge=1, le=10, description="How many result pages to scrape per query."
+    max_pages: int | None = Field(
+        default=None,
+        ge=1,
+        le=constants.MAX_PAGES_PER_QUERY,
+        description=(
+            "How many result pages to scrape per query. Omit to use the person's "
+            "`search.read_top_pages`, or 3 when nobody has chosen."
+        ),
     )
 
     summarize: bool = True
@@ -64,8 +74,17 @@ class SearchRequest(StrictModel):
         ),
     )
 
-    language: str = Field(default="en", max_length=8)
-    region: str = Field(default="us", max_length=8)
+    language: str | None = Field(
+        default=None,
+        max_length=8,
+        description="Results' language. Omit to use the person's `search.language`, or `en`.",
+    )
+    region: str | None = Field(
+        default=None,
+        max_length=8,
+        description="Where results are ranked for. Omit to use the person's `search.region`, "
+        "or `us`.",
+    )
     safe_search: bool | None = Field(
         default=None,
         description=(
@@ -93,7 +112,7 @@ class SearchResultOut(StrictModel):
     snippet: str
     rank: int
     content: str | None = Field(
-        default=None, description="Extracted page text, present only when fetch_pages was set."
+        default=None, description="Extracted page text, present only when the page was read."
     )
 
 

@@ -56,7 +56,9 @@ curl -s -X POST localhost:8006/v1/search \
 
 By default the summary is built from result titles and snippets, which is fast
 and cheap. `fetch_pages: true` additionally scrapes the top `max_pages` result
-pages and summarises their full text.
+pages (3 unless it says) and summarises their full text. A summarised search
+that leaves `fetch_pages` out reads as many pages as the person's
+`search.read_top_pages`, which is none until they choose.
 
 ### Scrape
 
@@ -273,8 +275,11 @@ Every value is optional. These are the ones most deployments touch;
 When settings-api is configured, each caller can lower `max_content_chars`,
 choose a default model and search backend, disable extra providers, pick a
 default keyring profile, choose how long their finished jobs stay readable,
-and set how hard explicit results are filtered and how recent a result must
-be. See [docs/architecture.md](docs/architecture.md#per-person-settings-ship-dark).
+set how hard explicit results are filtered and how recent a result must be,
+choose the language and region results are ranked for, block sites whose
+results they never want to see, have summaries written from the top pages
+rather than snippets, and set how long a summary is and what standing guidance
+it follows. See [docs/architecture.md](docs/architecture.md#per-person-settings-ship-dark).
 
 Provider credentials are **not** environment variables. They live in keyring,
 under the provider's key as the service name (`anthropic`, `groq`, …), and are
