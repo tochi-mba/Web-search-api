@@ -8,6 +8,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **settings-client 0.4.2.** A 2xx answer the client cannot use -- a proxy's page, an empty
+  body, a document from a newer settings-api -- is treated as an outage and degrades as one,
+  instead of reaching this service as a 500.
 - **A person's settings are read for the profile the request runs as.** The model, backend,
   safe-search level, result count and recency are profile-scoped, and settings-api returns a
   profile's values only to a request that names the profile. This service named none, so
