@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A summary that fails costs only the summary.** A timeout, a 502 or a provider's 400 from
+  the summarising model failed the whole `/v1/search` or `/v1/scrape` response, so a search
+  that found its results reported none and a fetched page reported it could not be read.
+  Results and pages now stand, with `summary_error` beside them saying why there is no
+  summary.
 - **settings-client 0.4.2.** A 2xx answer the client cannot use -- a proxy's page, an empty
   body, a document from a newer settings-api -- is treated as an outage and degrades as one,
   instead of reaching this service as a 500.
