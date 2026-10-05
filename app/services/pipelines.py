@@ -12,6 +12,7 @@ that submitted it has returned.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from typing import Any
 from urllib.parse import urlsplit
 
 from app import constants
@@ -34,6 +35,7 @@ from app.schemas.search import (
     SearchResponse,
     SearchResultOut,
 )
+from app.schemas.summary import SummaryOut
 from app.services.fetch.page import FetchedPage, PageFetcher
 from app.services.keyring.caller import Caller
 from app.services.keyring.client import ResolvedAuth
@@ -256,7 +258,8 @@ async def _attach_summary(
         f"## {item.title}\n{item.url}\n{item.content or item.snippet}" for item in result.results
     )
 
-    summary = await summarizer.summarize(
+    result.summary, result.summary_error = await _summarised(
+        summarizer,
         content,
         model_id=request.model,
         topic=result.query,
@@ -266,7 +269,24 @@ async def _attach_summary(
         auth=auth,
         preferences=preferences,
     )
-    result.summary = summary.as_out()
+
+
+async def _summarised(
+    summarizer: Summarizer, content: str, **options: Any
+) -> tuple[SummaryOut | None, ErrorPayload | None]:
+    """A summary, or why there is none -- never a failure of what was being summarised.
+
+    The model that writes a summary is a dependency the results do not have: a clyde timeout,
+    a 502 or a provider's 400 used to fail the whole query, so a search that found ten
+    results reported none, and a page that was fetched reported it could not be. The
+    contract is that one failing piece never fails the batch; a summary is one piece.
+    """
+    try:
+        summary = await summarizer.summarize(content, **options)
+    except DomainError as exc:
+        logger.info("summary.failed", topic=options.get("topic"), code=exc.code)
+        return None, ErrorPayload(**exc.to_error_payload())
+    return summary.as_out(), None
 
 
 # --------------------------------------------------------------------------- #
@@ -331,7 +351,8 @@ async def run_scrape(
         combined = "\n\n".join(
             f"# {r.page.title or r.page.url}\n{r.page.text}" for r in successful if r.page
         )
-        summary = await summarizer.summarize(
+        together, failed = await _summarised(
+            summarizer,
             combined,
             model_id=request.model,
             additional_notes=request.additional_notes,
@@ -340,11 +361,12 @@ async def run_scrape(
             auth=auth,
             preferences=preferences,
         )
-        return ScrapeResponse(results=results, summary=summary.as_out())
+        return ScrapeResponse(results=results, summary=together, summary_error=failed)
 
     for result in successful:
         assert result.page is not None  # noqa: S101 - filtered above
-        summary = await summarizer.summarize(
+        result.summary, result.summary_error = await _summarised(
+            summarizer,
             result.page.text,
             model_id=request.model,
             topic=result.page.title,
@@ -354,7 +376,6 @@ async def run_scrape(
             auth=auth,
             preferences=preferences,
         )
-        result.summary = summary.as_out()
 
     return ScrapeResponse(results=results)
 

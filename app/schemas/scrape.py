@@ -68,6 +68,13 @@ class ScrapeResult(StrictModel):
     page: ExtractedPage | None = None
     summary: SummaryOut | None = None
     error: ErrorPayload | None = None
+    summary_error: ErrorPayload | None = Field(
+        default=None,
+        description=(
+            "Why there is no summary, when one was asked for and the model did not give it. "
+            "Everything else in this result stands."
+        ),
+    )
 
 
 class ScrapeResponse(StrictModel):
@@ -76,6 +83,13 @@ class ScrapeResponse(StrictModel):
     results: list[ScrapeResult]
     summary: SummaryOut | None = Field(
         default=None, description="Present when summarize_together was set."
+    )
+    summary_error: ErrorPayload | None = Field(
+        default=None,
+        description=(
+            "Why there is no summary, when one was asked for and the model did not give it. "
+            "Everything else in this result stands."
+        ),
     )
 
 
