@@ -254,8 +254,12 @@ async def _attach_summary(
     query_in = next((q for q in request.queries if q.query == result.query), None)
     notes = (query_in.additional_notes if query_in else None) or request.additional_notes
 
+    # Numbered by rank, the number the caller shows beside each result, so a key point that
+    # ends "[2]" can be checked against result 2. Each URL is already beside its text, so
+    # the summariser is not handed the list a second time.
     content = "\n\n".join(
-        f"## {item.title}\n{item.url}\n{item.content or item.snippet}" for item in result.results
+        f"## [{item.rank}] {item.title}\n{item.url}\n{item.content or item.snippet}"
+        for item in result.results
     )
 
     result.summary, result.summary_error = await _summarised(
@@ -264,7 +268,6 @@ async def _attach_summary(
         model_id=request.model,
         topic=result.query,
         additional_notes=notes,
-        sources=[item.url for item in result.results],
         caller=caller,
         auth=auth,
         preferences=preferences,
@@ -348,8 +351,11 @@ async def run_scrape(
     successful = [r for r in results if r.status is ItemStatus.OK and r.page is not None]
 
     if request.summarize_together:
+        # Numbered in the order the pages were asked for, so "[2]" is the second page.
+        read = [r.page for r in successful if r.page is not None]
         combined = "\n\n".join(
-            f"# {r.page.title or r.page.url}\n{r.page.text}" for r in successful if r.page
+            f"# [{number}] {page.title or page.url}\n{page.text}"
+            for number, page in enumerate(read, start=1)
         )
         together, failed = await _summarised(
             summarizer,

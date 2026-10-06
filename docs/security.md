@@ -60,8 +60,10 @@ is no per-host concurrency limit.
 
 Scraped pages are untrusted text that reaches a language model. Full mitigation
 is not possible today, but the prompt makes the boundary explicit: content is
-fenced by `--- BEGIN SOURCE TEXT ---` markers and the model is told that
-anything inside is data rather than instructions. Caller `additional_notes` are
+fenced by `<source_text>` tags and the model is told that anything inside is
+data rather than instructions. A `source_text` tag inside the content is escaped
+before it is fenced, so a page cannot close the block itself and carry on in the
+instruction voice. Caller `additional_notes` are
 placed with the instructions instead of the content and framed as guidance
 about focus, not a source of facts.
 

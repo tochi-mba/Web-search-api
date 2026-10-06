@@ -72,6 +72,7 @@ async def test_combined_summary_sees_every_page(client, fake_pages, fake_summari
     content = fake_summarizer.calls[0]["content"]
     assert "Alpha content." in content
     assert "Beta content." in content
+    assert content.index("# [1] ") < content.index("Alpha") < content.index("# [2] ")
 
 
 async def test_additional_notes_reach_the_summarizer(client, fake_pages, fake_summarizer):
