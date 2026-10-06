@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Extended thinking is sent without a temperature.** On models that take a thinking
+  budget (Claude Haiku 4.5 among them), a request that asked for effort carried both the
+  budget and `temperature=0.2`, a pair the Messages API refuses, so the call was a 400. The
+  temperature now gives way, and the adjustment says so.
+- **A summary asks for no reasoning budget.** It inherited the default effort, so a
+  connected reasoning model spent part of the summary's output cap thinking, and a reply cut
+  off at the cap was stored raw.
 - **A summary that fails costs only the summary.** A timeout, a 502 or a provider's 400 from
   the summarising model failed the whole `/v1/search` or `/v1/scrape` response, so a search
   that found its results reported none and a fetched page reported it could not be read.

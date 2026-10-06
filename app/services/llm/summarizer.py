@@ -227,6 +227,10 @@ class Summarizer:
                 messages=[ChatMessage(role="user", content=prompt.user)],
                 system=prompt.system,
                 max_output_tokens=self._max_output_tokens,
+                # Summarising needs no reasoning budget. The request's default asked for one,
+                # which spent the output cap on thinking -- a JSON reply cut off at the cap
+                # is stored raw -- and paid for reasoning a summary does not use.
+                effort=None,
                 json_mode=True,
             ),
             model_id=model.id,
