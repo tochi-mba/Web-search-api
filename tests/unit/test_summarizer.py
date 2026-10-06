@@ -87,6 +87,13 @@ async def test_json_mode_is_requested(provider):
     assert provider.requests[0].json_mode is True
 
 
+async def test_a_summary_asks_for_no_reasoning_budget(provider):
+    """The bug, named: the summary inherited the request's default effort, so a connected
+    reasoning model spent part of a 2,000-token cap thinking about a summary."""
+    await build(provider).summarize("Some content.")
+    assert provider.requests[0].effort is None
+
+
 async def test_content_reaches_the_model(provider):
     await build(provider).summarize("A very specific sentence about widgets.")
     assert "A very specific sentence about widgets." in provider.requests[0].messages[0].content
