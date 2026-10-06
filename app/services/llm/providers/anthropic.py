@@ -169,6 +169,13 @@ class AnthropicProvider:
             else:
                 adjustments.append("effort dropped: this model has no reasoning controls")
 
+        if kwargs.get("thinking", {}).get("type") == "enabled" and "extra_body" in kwargs:
+            # The Messages API refuses a modified temperature while extended thinking is on,
+            # so sending both turned every such call into a 400. Thinking was asked for
+            # explicitly; the temperature is the default, so it is the one that gives way.
+            del kwargs["extra_body"]
+            adjustments.append("temperature dropped: not accepted with extended thinking")
+
         return kwargs, adjustments
 
     async def chat(self, request: ChatRequest, auth: ResolvedAuth) -> ChatResponse:
