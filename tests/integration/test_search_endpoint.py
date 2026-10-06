@@ -69,12 +69,16 @@ async def test_query_is_passed_as_the_topic(client, fake_summarizer):
     assert fake_summarizer.calls[0]["topic"] == "widget latency"
 
 
-async def test_result_urls_are_passed_as_sources(client, fake_summarizer):
+async def test_each_result_is_numbered_by_rank_beside_its_url(client, fake_summarizer):
+    """The bug, named: results reached the summariser unnumbered, and their URLs a second
+    time as a separate list, so a key point could not name the result that backed it."""
     await client.post("/v1/search", json={"queries": [{"query": "x"}]})
-    assert fake_summarizer.calls[0]["sources"] == [
-        "https://a.example.com/1",
-        "https://b.example.com/2",
-    ]
+    call = fake_summarizer.calls[0]
+    assert "## [1] " in call["content"]
+    assert "## [2] " in call["content"]
+    assert "https://a.example.com/1" in call["content"]
+    assert "https://b.example.com/2" in call["content"]
+    assert call.get("sources") is None, "each URL is already beside its text"
 
 
 async def test_batch_notes_are_applied(client, fake_summarizer):

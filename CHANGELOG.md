@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A summary says which source backs each point, and a page cannot end its own source
+  block.** Results reach the summariser numbered as the caller numbers them, `## [2] title`,
+  and each key point ends with the numbers of the sources behind it, so a figure can be
+  checked without opening every page. The block is fenced with `<source_text>` tags, and a
+  tag inside the content is escaped: the old plain-text end marker could be written by a page,
+  which then carried on in the instruction voice. Key points are capped at five by default,
+  and each must add something the summary does not already say. The search path no longer
+  lists every URL a second time.
 - **Extended thinking is sent without a temperature.** On models that take a thinking
   budget (Claude Haiku 4.5 among them), a request that asked for effort carried both the
   budget and `temperature=0.2`, a pair the Messages API refuses, so the call was a 400. The
