@@ -183,13 +183,25 @@ async def test_opus_5_sends_adaptive_thinking_and_no_temperature(provider, serve
     assert body["system"] == "Be terse."
 
 
-async def test_haiku_45_sends_budget_tokens_and_keeps_temperature(provider, server):
+async def test_haiku_45_sends_budget_tokens_and_drops_temperature(provider, server):
+    """The bug, named: thinking with a budget was sent with temperature=0.2, a pair the
+    Messages API refuses, so every call that asked for effort on Haiku 4.5 was a 400."""
     server.queue(message_response())
-    await provider.chat(request_for("claude-haiku-4-5", max_output_tokens=8_000), AUTH)
+    response = await provider.chat(request_for("claude-haiku-4-5", max_output_tokens=8_000), AUTH)
 
     body = server.last_request.body
     assert body["thinking"] == {"type": "enabled", "budget_tokens": 4_000}
     assert "output_config" not in body
+    assert "temperature" not in body
+    assert any("not accepted with extended thinking" in a for a in response.param_adjustments)
+
+
+async def test_haiku_45_keeps_temperature_when_no_thinking_is_asked_for(provider, server):
+    server.queue(message_response())
+    await provider.chat(request_for("claude-haiku-4-5", effort=None), AUTH)
+
+    body = server.last_request.body
+    assert "thinking" not in body
     assert body["temperature"] == 0.2
 
 
